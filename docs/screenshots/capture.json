@@ -1,0 +1,35 @@
+{
+  "capture_helper_version": "0.2.0",
+  "smarttar_version": "0.2.0",
+  "captured_utc": "2026-10-29T17:50:33.522138+00:00",
+  "source_revision": "d19fbe735a33a4ca043267577639a2e3620e5d6c",
+  "operating_system": "Ubuntu 24.04.5 LTS",
+  "display": "Dedicated Xvfb with Openbox and Qt Fusion style",
+  "provenance": "Actual SmartTar KDialog windows captured in an automated Linux Xvfb/Openbox session using a harmless example archive. Responses were supplied by the capture helper. No application from the archive was run. Appearance may differ on CachyOS, KDE Plasma, or DEsk.",
+  "fixture": "Synthetic Example-App.tar.gz containing a copy of /usr/bin/true, never executed",
+  "responses": "Supplied by the helper after each actual window was captured",
+  "native_cachyos_kde_desk_validation": false,
+  "screenshots": [
+    {
+      "file": "01-main-menu.png",
+      "caption": "Choose what to do with a downloaded archive.",
+      "width": 280,
+      "height": 338,
+      "sha256": "09e60928b27c184d9153738161f6c1b965b753903450bc63c974b021a446f9bb"
+    },
+    {
+      "file": "02-install-confirmation.png",
+      "caption": "Review the application and destination before installing.",
+      "width": 702,
+      "height": 159,
+      "sha256": "2df0f604d9192621c92373fcbe2ecf51e8c20397c065dd491f917cf43c8ff45d"
+    },
+    {
+      "file": "03-install-complete.png",
+      "caption": "The example application has been copied into the private test directory.",
+      "width": 461,
+      "height": 142,
+      "sha256": "14aed8efc02b2db536fe00f8ff2cb9007c2cb466ae3c776fa1dd0a04a1bc2e94"
+    }
+  ]
+}

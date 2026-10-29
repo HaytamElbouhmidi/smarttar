@@ -8,7 +8,7 @@ I built SmartTar for people who want to install a downloaded program without wor
 
 **Download it. Open it. Install it.** No terminal commands are needed for ordinary use with supported app downloads.
 
-[Download SmartTar](https://github.com/HaytamElbouhmidi/smarttar/archive/refs/heads/main.zip) · [One-time setup](#installation) · [Technical details](docs/TECHNICAL.md)
+[Download SmartTar](https://github.com/HaytamElbouhmidi/smarttar/archive/refs/heads/main.zip) · [Screenshots](#screenshots) · [One-time setup](#installation) · [Technical details](docs/TECHNICAL.md)
 
 ## What does it do?
 
@@ -42,6 +42,28 @@ If SmartTar lists several programs and you are unsure which one to choose, cance
 
 Large downloads can take time to check before the first window appears. This version does not yet show a progress bar.
 
+## Screenshots
+
+### Choose what to do
+
+Open a download and select an available install option, unpack its files, or get guidance.
+
+![SmartTar showing the install, extract, review, and guidance options for an example app](docs/screenshots/01-main-menu.png)
+
+### Review and confirm
+
+Check which program will be installed and where it will be placed. Choose **Yes** only if you trust the download.
+
+![SmartTar asking for confirmation before installing the example app](docs/screenshots/02-install-confirmation.png)
+
+### Find the app in your menu
+
+After installation, SmartTar confirms that the app has an entry in the application menu.
+
+![SmartTar confirming successful installation and the application-menu entry](docs/screenshots/03-install-complete.png)
+
+These are real SmartTar dialogs captured in an automated Ubuntu test session with an example app, not mockups. Colors and window borders depend on your desktop theme. The temporary destination shown is only for the test. See the [capture details](docs/screenshots/capture.json).
+
 ## Installation
 
 ### One-time setup
@@ -67,7 +89,7 @@ Large downloads can take time to check before the first window appears. This ver
 
 6. Close the terminal and double-click `examples/smarttar-smoke-test.tar.gz` in the extracted project folder. SmartTar should open and offer to unpack its text file.
 
-An update can be installed over an earlier version. If setup reports a warning or opening an archive still starts Ark, see [troubleshooting](docs/TECHNICAL.md#diagnostics-and-extraction).
+An update can be installed over an earlier version. If setup reports a warning or opening an archive still starts Ark, see [troubleshooting](docs/TECHNICAL.md#diagnostics-and-command-line-extraction).
 
 ## What if there is no Install button?
 
@@ -90,7 +112,7 @@ The automated tests on GitHub run on GitHub's computers, not on yours. They are 
 
 SmartTar does check each archive before installation and while unpacking it. This helps catch damaged files, unsafe paths, and accidental overwrites. These checks add some processing time for large downloads, but there is no background scanning.
 
-See the [measurements and technical details](docs/TECHNICAL.md#validation-and-performance) if you want the numbers.
+See the [measurements and technical details](docs/TECHNICAL.md#performance-measurements) if you want the numbers.
 
 ## Current status
 
