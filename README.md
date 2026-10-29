@@ -2,9 +2,11 @@
 
 **Version 0.2.0 | Status: Testing | Linux | CachyOS / Arch | KDE Plasma / DEsk**
 
-I built SmartTar to inspect a downloaded `.tar.gz` or `.tgz` archive from Dolphin and install supported portable applications after confirmation. A compressed archive is not automatically an installer. Source projects and installation scripts get extraction and guidance, not automatic execution.
+I built SmartTar as a general-purpose handler for downloaded `.tar.gz` and `.tgz` files on CachyOS and Arch Linux. Open an archive from Dolphin to inspect its contents, install a supported Linux application, or extract its files and review installation guidance.
 
-The archive and integration tests run in isolated Linux environments. Native CachyOS, KDE Plasma, DEsk, and the downloaded Android Studio Rabbit 2 bundle still need laptop verification, so I am keeping this release marked **Testing**.
+A compressed archive is not automatically an installer. Source projects, installation scripts, and ordinary files get extraction and guidance rather than automatic execution.
+
+The archive and integration tests run in isolated Linux environments. Native CachyOS, KDE Plasma, and DEsk testing with real application archives is still pending, so I am keeping this release marked **Testing**.
 
 ## Requirements and footprint
 
@@ -50,8 +52,8 @@ Setup exit code **2** means the association was written but activation was **not
 
 | Archive contents | Action |
 | --- | --- |
-| Recognized Android Studio Linux bundle | Offer installation using the IDE launcher, preserving its bundled runtime and libraries |
 | Executable Linux ELF candidate, including an executable AppImage | Offer user-level installation and create an application launcher |
+| Recognized application bundle with a supported launcher layout | Offer installation using the application launcher, preserving bundled files and libraries |
 | `.pkg.tar.gz` with `.PKGINFO` | Show guidance for separately installing a trusted package with pacman |
 | `PKGBUILD` | Offer extraction and separate review/build guidance |
 | `install.sh`, `setup.sh`, or source project | Offer extraction and guidance without running the contents |
@@ -61,24 +63,16 @@ Portable applications go to `~/.local/opt/smarttar/<archive-name>/`. Launchers g
 
 **Finding an executable does not prove that an application is portable or compatible.** CPU architecture, runtime libraries, AppImage requirements, and project-specific installation steps remain the publisher's responsibility. Contained relative symbolic links and hardlinks are supported. Unsafe links, sparse files, and special files are rejected. Native `.deb`, `.rpm`, and `.pkg.tar.zst` installation is not supported.
 
-## Android Studio
+## Using SmartTar
 
-Version 0.2.0 removes the previous 1 GiB compressed-file barrier. It recognizes Android Studio's `AI` product metadata, matches a Linux launcher to the host architecture, and offers **Install Android Studio** instead of listing Java and internal helper programs. A recognized bundle with invalid metadata or an unsupported launcher is available for extraction and review only.
+1. Double-click a downloaded `.tar.gz` or `.tgz` file.
+2. Review the detected archive type and expanded size. Use **Review archive contents** to inspect its files.
+3. Choose installation when a supported application launcher is detected, or extract the archive to a new folder.
+4. Confirm the destination. Installed applications appear in the application menu and run only when launched.
 
-The supported launcher paths are `bin/studio` and the older `bin/studio.sh`. An older bundle without product metadata can be recognized by its `AI-` build identifier and expected directory layout. Recognition identifies the layout, not the publisher or authenticity of the download.
+SmartTar chooses the available actions from the archive's contents. It does not automatically run installation scripts, compile source code, accept licenses, or install system dependencies. Recognition identifies a supported layout, not the publisher or authenticity of the download.
 
-To test an existing Rabbit 2 download after updating SmartTar:
-
-```bash
-python3 ~/.local/share/smarttar/smarttar.py --version
-python3 ~/.local/share/smarttar/smarttar.py --inspect ~/Downloads/android-studio-rabbit2-linux.tar.gz
-```
-
-The version should be `0.2.0`. A supported current bundle should report `android-studio` and its `android-studio/bin/studio` launcher. Then double-click the archive and confirm installation. SmartTar creates an **Android Studio** application-menu entry without starting the IDE.
-
-Google's [Linux installation guide](https://developer.android.com/studio/install) uses the native `studio` launcher. Android Studio's first-run wizard handles SDK downloads. SmartTar does not install the SDK, configure emulator acceleration, accept licenses, or install system dependencies for the IDE.
-
-The tests use synthetic Android Studio layouts and a real gzip archive larger than 1 GiB. They do not include or redistribute the Android Studio vendor archive. Large archives take time to scan and extract, and this version does not display a progress bar during those stages.
+Version 0.2.0 accepts compressed archives up to 8 GiB, subject to the expanded-size and structure limits below. Large archives take time to scan and extract, and this version does not display a progress bar during those stages.
 
 ## Archive safeguards
 
@@ -131,7 +125,7 @@ bash -n install.sh uninstall.sh
 python3 tools/benchmark.py --repetitions 3
 ```
 
-The tests cover malformed and modified archives, contained and adversarial links, Android Studio layouts, installation and rollback, real `xdg-mime` resolution with a competing archive handler, and a locally compiled native fixture that loads a relative asset. The native fixture requires a C compiler and the XDG tests require `xdg-mime`, otherwise those tests are skipped. KDialog responses are mocked for workflow tests. They do not replace a live KDE/DEsk check.
+The tests cover malformed and modified archives, contained and adversarial links, supported application-bundle layouts, installation and rollback, real `xdg-mime` resolution with a competing archive handler, and a locally compiled native fixture that loads a relative asset. The native fixture requires a C compiler and the XDG tests require `xdg-mime`, otherwise those tests are skipped. KDialog responses are mocked for workflow tests. They do not replace a live KDE/DEsk check.
 
 The full-size regression is deliberately skipped during an ordinary test run. Enable it with the following command. It needs approximately 2.1 GiB of temporary disk space and removes its temporary files afterward.
 
@@ -150,7 +144,7 @@ The following v0.2.0 results were measured on Linux 6.18.55 with Python 3.12.14.
 | Inspect and extract 64 MiB of payload | 0.441 s | 20.32 MiB |
 | Inspect and extract 5,000 files | 1.509 s | 22.40 MiB |
 
-The separately enabled full-size test inspected and extracted a valid 1,073,832,983-byte gzip archive containing two 512 MiB files. That run measured 1.743 s for inspection, 2.763 s for extraction, and 25.01 MiB peak RSS in a fresh Python process. Fixture generation, KDialog, and KDE are excluded. This is a synthetic archive test, not an Android Studio launch test.
+The separately enabled full-size test inspected and extracted a valid 1,073,832,983-byte gzip archive containing two 512 MiB files. That run measured 1.743 s for inspection, 2.763 s for extraction, and 25.01 MiB peak RSS in a fresh Python process. Fixture generation, KDialog, and KDE are excluded. This is a synthetic archive test, not proof that an arbitrary application will install or launch successfully.
 
 These are measurements from one test environment, not guaranteed timings or total desktop memory requirements. Use the included benchmark to measure the same workloads locally.
 
