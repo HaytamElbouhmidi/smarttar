@@ -6,17 +6,19 @@ Version 0.2.0 · Testing · CachyOS and Arch Linux · KDE Plasma and DEsk
 
 I built SmartTar for people who want to install a downloaded program without working out terminal commands. After the one-time setup, double-click a `.tar.gz` or `.tgz` download, choose an available install option, and confirm. The installed app appears in your application menu.
 
+For example, if a Linux app's website gives you a `.tar.gz` download and you do not know what to do with it, SmartTar checks whether the app can be installed from that download. If it can, you confirm the installation in a window. If it cannot, SmartTar offers to unpack the files or explain the next steps.
+
 **Download it. Open it. Install it.** No terminal commands are needed for ordinary use with supported app downloads.
 
 [Download SmartTar](https://github.com/HaytamElbouhmidi/smarttar/archive/refs/heads/main.zip) · [Screenshots](#screenshots) · [One-time setup](#installation) · [Technical details](docs/TECHNICAL.md)
 
 ## What does it do?
 
-A `.tar.gz` file is a package of compressed files, similar to a ZIP. Some contain ready-to-run programs. Others contain source code, documents, or installation scripts.
+A `.tar.gz` file is a bundle of files packed together to make the download smaller, similar to a ZIP. Some contain programs that are ready to use. Others contain documents, installer scripts, or source code, the files a developer uses to build a program. The word **archive** in SmartTar means this downloaded bundle.
 
 SmartTar looks inside the download and offers the options that fit:
 
-- **Install an app:** Copy a supported program into your user account and add it to the application menu.
+- **Install an app:** Save a supported program on your computer for your own use and add a shortcut to your application menu.
 - **Unpack files:** Put the contents into a new folder.
 - **Get guidance:** Show what to do when the download needs a different installation method.
 
@@ -36,7 +38,7 @@ If installation is not offered, choose **Extract to a new folder** or **Installa
 
 ### 3. Confirm and open the app
 
-Review the destination and confirm. Once installation finishes, open the app from your normal application menu. You do not need to keep SmartTar open.
+Review the destination, the folder where the program will be saved, and confirm. Once installation finishes, open the app from your normal application menu, where you find your other programs. You do not need to keep SmartTar open.
 
 If SmartTar lists several programs and you are unsure which one to choose, cancel and check the publisher's instructions.
 
@@ -70,9 +72,9 @@ These are real SmartTar dialogs captured in an automated Ubuntu test session wit
 
 **The current setup still requires two terminal commands.** You only do this to install SmartTar or update it. Everyday use is graphical after setup.
 
-1. Use **Download SmartTar** above and extract the ZIP.
+1. Use **Download SmartTar** above and extract the ZIP. Extract means unpacking its contents into a normal folder. Do not try to run the installer from inside the ZIP viewer.
 2. Open the extracted folder containing `install.sh` in Dolphin.
-3. Right-click inside the folder and choose **Open Terminal Here**.
+3. Right-click inside the folder and choose **Open Terminal Here**. A terminal is a window where you enter commands. You can copy the two commands below as written.
 4. Copy and paste this command to install any missing requirements. Enter your Linux password if asked:
 
    ```bash
@@ -116,7 +118,7 @@ See the [measurements and technical details](docs/TECHNICAL.md#performance-measu
 
 ## Current status
 
-This is a testing release. Automated Linux tests have passed, but real CachyOS, KDE Plasma, and DEsk use still needs wider testing. Installation is available for supported app layouts, not every possible `.tar.gz` file.
+This is a testing release, so you may still run into problems. Automated Linux tests have passed, but more testing on real CachyOS, KDE Plasma, and DEsk setups is needed. SmartTar can install programs it recognizes as ready to use, not every possible `.tar.gz` file.
 
 The detailed compatibility list, size limits, diagnostics, benchmark results, and removal instructions are in [the technical guide](docs/TECHNICAL.md).
 
