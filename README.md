@@ -1,161 +1,105 @@
 # SmartTar
 
-**Version 0.2.0 | Status: Testing | Linux | CachyOS / Arch | KDE Plasma / DEsk**
+**Install downloaded Linux apps with a few clicks.**
 
-I built SmartTar as a general-purpose handler for downloaded `.tar.gz` and `.tgz` files on CachyOS and Arch Linux. Open an archive from Dolphin to inspect its contents, install a supported Linux application, or extract its files and review installation guidance.
+Version 0.2.0 · Testing · CachyOS and Arch Linux · KDE Plasma and DEsk
 
-A compressed archive is not automatically an installer. Source projects, installation scripts, and ordinary files get extraction and guidance rather than automatic execution.
+I built SmartTar for people who want to install a downloaded program without working out terminal commands. After the one-time setup, double-click a `.tar.gz` or `.tgz` download, choose an available install option, and confirm. The installed app appears in your application menu.
 
-The archive and integration tests run in isolated Linux environments. Native CachyOS, KDE Plasma, and DEsk testing with real application archives is still pending, so I am keeping this release marked **Testing**.
+**Download it. Open it. Install it.** No terminal commands are needed for ordinary use with supported app downloads.
 
-## Requirements and footprint
+[Download SmartTar](https://github.com/HaytamElbouhmidi/smarttar/archive/refs/heads/main.zip) · [One-time setup](#installation) · [Technical details](docs/TECHNICAL.md)
 
-- Python 3.10 or later, using only the standard library
-- `kdialog` for the native KDE dialogs
-- `xdg-utils` for desktop association checks
-- A graphical desktop session for interactive use
-- `kbuildsycoca6` when available for KDE cache refresh
+## What does it do?
 
-There are no pip packages, bundled interpreter, browser runtime, daemon, tray process, startup service, or polling loop. SmartTar runs when opened and exits when closed. KDialog uses the system's KDE libraries, so additional package size depends on what is already installed.
+A `.tar.gz` file is a package of compressed files, similar to a ZIP. Some contain ready-to-run programs. Others contain source code, documents, or installation scripts.
 
-Each inspection or extraction streams the archive in one forward pass using bounded buffers. The usual inspect-then-install workflow reads the archive twice, once for each stage, rather than repeatedly seeking through gzip data.
+SmartTar looks inside the download and offers the options that fit:
+
+- **Install an app:** Copy a supported program into your user account and add it to the application menu.
+- **Unpack files:** Put the contents into a new folder.
+- **Get guidance:** Show what to do when the download needs a different installation method.
+
+It asks before making changes. Opening a download does not automatically run its programs or scripts.
+
+## Everyday use
+
+### 1. Open your download
+
+Download a Linux app from a website you trust, then double-click its `.tar.gz` or `.tgz` file in Dolphin, the file manager.
+
+### 2. Choose Install
+
+If the archive contains a supported ready-to-run program, choose **Install portable application** or the named install option. Here, portable means the app can run from its own folder.
+
+If installation is not offered, choose **Extract to a new folder** or **Installation guidance**.
+
+### 3. Confirm and open the app
+
+Review the destination and confirm. Once installation finishes, open the app from your normal application menu. You do not need to keep SmartTar open.
+
+If SmartTar lists several programs and you are unsure which one to choose, cancel and check the publisher's instructions.
+
+Large downloads can take time to check before the first window appears. This version does not yet show a progress bar.
 
 ## Installation
 
-1. Download and extract the project, or open an existing checkout.
-2. Open a terminal in the folder containing `install.sh`.
-3. Install missing system dependencies:
+### One-time setup
+
+**The current setup still requires two terminal commands.** You only do this to install SmartTar or update it. Everyday use is graphical after setup.
+
+1. Use **Download SmartTar** above and extract the ZIP.
+2. Open the extracted folder containing `install.sh` in Dolphin.
+3. Right-click inside the folder and choose **Open Terminal Here**.
+4. Copy and paste this command to install any missing requirements. Enter your Linux password if asked:
 
    ```bash
    sudo pacman -S --needed python kdialog xdg-utils
    ```
 
-4. Run the user-level installer without `sudo`:
+5. Run the SmartTar installer:
 
    ```bash
    bash install.sh
    ```
 
-5. Check the configuration, then double-click `examples/smarttar-smoke-test.tar.gz` in Dolphin:
+   Do not put `sudo` before this second command. SmartTar installs for your own user account.
 
-   ```bash
-   python3 ~/.local/share/smarttar/smarttar.py --doctor
-   ```
+6. Close the terminal and double-click `examples/smarttar-smoke-test.tar.gz` in the extracted project folder. SmartTar should open and offer to unpack its text file.
 
-The sample archive contains only a text file. It should open the SmartTar menu and offer extraction, not portable installation. After that check, try a trusted application archive.
+An update can be installed over an earlier version. If setup reports a warning or opening an archive still starts Ark, see [troubleshooting](docs/TECHNICAL.md#diagnostics-and-extraction).
 
-An update can be installed over an earlier version. The installer registers `application/x-compressed-tar`, preserves prior preferences, and refreshes the KDE cache when available. It writes only to the current user's directories and respects `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. The commands here use their usual defaults.
+## What if there is no Install button?
 
-Setup exit code **2** means the association was written but activation was **not confirmed**. The installation script stops without printing its success message. Run `--doctor` and check the current desktop session before assuming double-click support works.
+Not every compressed download contains a ready-to-run app. Some need to be built from source or installed through another tool. SmartTar can unpack those files and offer guidance, but it does not silently run unfamiliar installers.
 
-## Supported actions
+It also does not automatically download missing libraries or make a Windows program run on Linux. The publisher's requirements still apply.
 
-| Archive contents | Action |
-| --- | --- |
-| Executable Linux ELF candidate, including an executable AppImage | Offer user-level installation and create an application launcher |
-| Recognized application bundle with a supported launcher layout | Offer installation using the application launcher, preserving bundled files and libraries |
-| `.pkg.tar.gz` with `.PKGINFO` | Show guidance for separately installing a trusted package with pacman |
-| `PKGBUILD` | Offer extraction and separate review/build guidance |
-| `install.sh`, `setup.sh`, or source project | Offer extraction and guidance without running the contents |
-| Other regular files | Offer extraction |
+## Is it lightweight?
 
-Portable applications go to `~/.local/opt/smarttar/<archive-name>/`. Launchers go to `~/.local/share/applications/` and use the executable's directory as their working directory. Existing installations are not overwritten. Nothing inside the downloaded archive runs during inspection or installation.
+Yes. The installer copies one small Python program, using the Python and KDE components already on the system when available.
 
-**Finding an executable does not prove that an application is portable or compatible.** CPU architecture, runtime libraries, AppImage requirements, and project-specific installation steps remain the publisher's responsibility. Contained relative symbolic links and hardlinks are supported. Unsafe links, sparse files, and special files are rejected. Native `.deb`, `.rpm`, and `.pkg.tar.zst` installation is not supported.
+- No background service, tray app, or startup process.
+- No bundled browser or Python runtime.
+- Nothing stays running when SmartTar is closed.
+- An installed app opens directly, without starting SmartTar again.
 
-## Using SmartTar
+## Why are there checks?
 
-1. Double-click a downloaded `.tar.gz` or `.tgz` file.
-2. Review the detected archive type and expanded size. Use **Review archive contents** to inspect its files.
-3. Choose installation when a supported application launcher is detected, or extract the archive to a new folder.
-4. Confirm the destination. Installed applications appear in the application menu and run only when launched.
+The automated tests on GitHub run on GitHub's computers, not on yours. They are not run when you open a download. Tests, screenshots, and this documentation are not copied into the installed app.
 
-SmartTar chooses the available actions from the archive's contents. It does not automatically run installation scripts, compile source code, accept licenses, or install system dependencies. Recognition identifies a supported layout, not the publisher or authenticity of the download.
+SmartTar does check each archive before installation and while unpacking it. This helps catch damaged files, unsafe paths, and accidental overwrites. These checks add some processing time for large downloads, but there is no background scanning.
 
-Version 0.2.0 accepts compressed archives up to 8 GiB, subject to the expanded-size and structure limits below. Large archives take time to scan and extract, and this version does not display a progress bar during those stages.
+See the [measurements and technical details](docs/TECHNICAL.md#validation-and-performance) if you want the numbers.
 
-## Archive safeguards
+## Current status
 
-I still verify the publisher and download source before launching any installed program. The SHA-256 check detects archive changes between inspection and extraction. It is not a signature check, malware scan, or proof of publisher trust.
+This is a testing release. Automated Linux tests have passed, but real CachyOS, KDE Plasma, and DEsk use still needs wider testing. Installation is available for supported app layouts, not every possible `.tar.gz` file.
 
-SmartTar refuses absolute member paths, parent traversal in member names, duplicate paths, control characters, sparse files, and special files. Link targets must remain inside the archive and resolve to existing files or directories. Dangling links, link cycles, directory traversal cycles, and archive members beneath link parents are rejected. Links are created only after regular-file extraction and the complete SHA-256 check succeed.
+The detailed compatibility list, size limits, diagnostics, benchmark results, and removal instructions are in [the technical guide](docs/TECHNICAL.md).
 
-Extracted files do not inherit archive ownership or setuid/setgid bits. SmartTar checks available destination space using payload size plus an overhead allowance before extraction. Quotas and concurrent disk usage can still cause a write to fail. It never executes build scripts, installs dependencies, or elevates privileges.
+## License
 
-| Resource | Limit |
-| --- | --- |
-| Compressed archive | 8 GiB |
-| Total extracted payload | 16 GiB |
-| Individual file | 8 GiB |
-| Entries / total filesystem nodes including implicit directories | 100,000 / 100,000 |
-| One metadata header / total metadata | 1 MiB / 16 MiB |
-| Additional decompressed tar overhead | 384 MiB |
-| Path length / depth | 4,096 bytes / 128 components |
-| Link resolution chain | 40 links |
+MIT license. Copyright (c) 2026 Haytam Elbouhmidi, Mechanical Engineer.
 
-Additional header-count and metadata-nesting limits bound malformed tar processing.
-
-## Diagnostics and extraction
-
-```bash
-python3 ~/.local/share/smarttar/smarttar.py --version
-python3 ~/.local/share/smarttar/smarttar.py --doctor
-python3 ~/.local/share/smarttar/smarttar.py --inspect ~/Downloads/example.tar.gz
-python3 ~/.local/share/smarttar/smarttar.py ~/Downloads/example.tar.gz --extract ~/Downloads
-```
-
-`--doctor` is read-only. It checks dependencies, session information, the installed handler, and the reported default application. A passing result does not verify that a KDialog window rendered correctly.
-
-If Dolphin still opens Ark, inspect the association and the actual file type:
-
-```bash
-xdg-mime query default application/x-compressed-tar
-xdg-mime query filetype ~/Downloads/example.tar.gz
-```
-
-Expected results are `smarttar-handler.desktop` and `application/x-compressed-tar`. Plain `.gz` files are outside this association. Restart Dolphin after changing settings. If necessary, open KDE File Associations, search for `x-compressed-tar`, and review the preferred application.
-
-## Validation and performance
-
-Run the checks from the project directory:
-
-```bash
-python3 -m unittest discover -s tests -v
-bash -n install.sh uninstall.sh
-python3 tools/benchmark.py --repetitions 3
-```
-
-The tests cover malformed and modified archives, contained and adversarial links, supported application-bundle layouts, installation and rollback, real `xdg-mime` resolution with a competing archive handler, and a locally compiled native fixture that loads a relative asset. The native fixture requires a C compiler and the XDG tests require `xdg-mime`, otherwise those tests are skipped. KDialog responses are mocked for workflow tests. They do not replace a live KDE/DEsk check.
-
-The full-size regression is deliberately skipped during an ordinary test run. Enable it with the following command. It needs approximately 2.1 GiB of temporary disk space and removes its temporary files afterward.
-
-```bash
-env SMARTTAR_RUN_LARGE_TESTS=1 python3 -m unittest discover -s tests -v
-```
-
-The local v0.2.0 validation run on October 29, 2026 passed all 119 tests with the full-size test enabled and no skips. An ordinary run passes 118 tests and skips the one opt-in full-size test in the same environment. The included GitHub workflow is configured for Python 3.10, 3.12, and 3.14. Its remote results are separate from local test records.
-
-The following v0.2.0 results were measured on Linux 6.18.55 with Python 3.12.14. Times are medians of three runs, and memory is the highest recorded peak process RSS. Filesystem caches were not flushed. KDialog, KDE, and filesystem cache memory are excluded.
-
-| Command-line workload | Time | Peak RSS |
-| --- | ---: | ---: |
-| Startup with `--version` | 0.131 s | 15.75 MiB |
-| Inspect 64 MiB of payload | 0.227 s | 16.54 MiB |
-| Inspect and extract 64 MiB of payload | 0.441 s | 20.32 MiB |
-| Inspect and extract 5,000 files | 1.509 s | 22.40 MiB |
-
-The separately enabled full-size test inspected and extracted a valid 1,073,832,983-byte gzip archive containing two 512 MiB files. That run measured 1.743 s for inspection, 2.763 s for extraction, and 25.01 MiB peak RSS in a fresh Python process. Fixture generation, KDialog, and KDE are excluded. This is a synthetic archive test, not proof that an arbitrary application will install or launch successfully.
-
-These are measurements from one test environment, not guaranteed timings or total desktop memory requirements. Use the included benchmark to measure the same workloads locally.
-
-## Remove SmartTar
-
-```bash
-bash uninstall.sh
-```
-
-Removal restores recorded archive preferences while preserving unrelated settings and later user choices. Previously installed portable applications remain available. To remove one of those apps, delete its exact installation folder and matching `smarttar-<archive-name>.desktop` launcher after checking the name.
-
-## Version history and license
-
-See [CHANGELOG.md](CHANGELOG.md) for release changes. MIT license, copyright 2026 Haytam Elbouhmidi, Mechanical Engineer. See [LICENSE](LICENSE).
+See [LICENSE](LICENSE) and [CHANGELOG.md](CHANGELOG.md).
