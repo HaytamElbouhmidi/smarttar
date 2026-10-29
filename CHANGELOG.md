@@ -2,13 +2,13 @@
 
 ## 0.2.0
 
-Status: Testing. Native CachyOS/KDE Plasma/DEsk and the downloaded Android Studio bundle still need laptop verification.
+Status: Testing. Native CachyOS/KDE Plasma/DEsk and real application archives still need laptop verification.
 
 - Raised archive limits to 8 GiB compressed, 16 GiB extracted payload, 8 GiB per file, and 100,000 entries.
 - Added contained relative symbolic links and hardlinks while rejecting escaping, dangling, cyclic, and unsafe link layouts.
-- Added Android Studio bundle recognition that selects the IDE launcher instead of bundled Java or helper programs.
+- Added recognition for a supported application-bundle layout, selecting its main launcher instead of runtime or helper programs.
 - Added a destination free-space check before extraction and retained streaming reads with bounded buffers.
-- Added Android Studio layout fixtures, adversarial link tests, and a full-size regression using a valid archive larger than 1 GiB.
+- Added application-bundle layout fixtures, adversarial link tests, and a full-size regression using a valid archive larger than 1 GiB.
 
 ## 0.1.2
 
