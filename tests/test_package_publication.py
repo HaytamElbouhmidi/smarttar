@@ -313,6 +313,7 @@ class PublicationTests(unittest.TestCase):
         self.assertNotRegex(workflow, r"push[^\n]*--force")
         self.assertIn("HEAD:refs/heads/packages", workflow)
         self.assertIn("bash release/tools/test_live_repository.sh", workflow)
+        self.assertIn("pacman-key --init", workflow)
         self.assertIn("SMARTTAR_LIVE_RESULT:", workflow)
         self.assertIn("/tmp/smarttar-release-output/*.json", workflow)
         self.assertNotIn("signing-*/", workflow)

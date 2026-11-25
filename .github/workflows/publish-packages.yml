@@ -135,7 +135,9 @@ jobs:
           SMARTTAR_EXPECTED_VERSION: ${{ steps.release.outputs.version }}
           SMARTTAR_PUBLIC_KEY: ${{ github.workspace }}/release/packaging/keys/smarttar.asc
           SMARTTAR_LIVE_RESULT: /tmp/smarttar-release-output/live-system-test.json
-        run: bash release/tools/test_live_repository.sh
+        run: |
+          pacman-key --init
+          bash release/tools/test_live_repository.sh
       - name: Save public release verification records
         uses: actions/upload-artifact@v7
         with:
