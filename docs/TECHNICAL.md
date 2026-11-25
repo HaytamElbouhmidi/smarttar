@@ -1,10 +1,10 @@
 # Technical details
 
-SmartTar v0.4.0 | Status: Testing, package-update rollout staged
+SmartTar v0.4.0 | Status: Testing | Signed update channel verified November 25, 2026
 
 I keep the implementation details, safeguards, diagnostics, and development checks here. For the normal download, installation, and double-click workflow, start with the [README](../README.md).
 
-The v0.4.0 signed-repository and migration path is staged. Publication and clean-install, migration, and upgrade checks must pass before the update channel is treated as verified. The earlier v0.2.0 and v0.3.0 test records below do not establish that new path.
+The public signed update channel passed [production verification on November 25, 2026](https://github.com/HaytamElbouhmidi/smarttar/actions/runs/45696716737), including a clean installation and normal-user migration in a disposable Arch container. Native CachyOS, KDE Plasma, and DEsk testing is still needed. The [release verification record](releases/v0.4.0-verification.json) records the exact source, package, signatures, and limits of those checks.
 
 ## Requirements and installed footprint
 
@@ -17,6 +17,8 @@ The v0.4.0 signed-repository and migration path is staged. Publication and clean
 The one-time package bootstrap also needs system Python, `sudo`, and an Arch-compatible Pacman installation. The packaged runtime declares Python, KDialog, and xdg-utils as dependencies. The package does not bundle their runtimes.
 
 There are no pip packages, bundled interpreter, browser runtime, daemon, tray process, startup service, or polling loop. SmartTar runs when opened and exits when closed. KDialog uses the system's KDE libraries, so additional dependency size depends on what is already installed.
+
+The published `smarttar-0.4.0-1-any.pkg.tar.zst` is 24,609 bytes, about 24 KiB. Pacman reports a rounded installed size of 0.07 MiB. These figures cover SmartTar's own package, not system dependencies, user data, or apps installed through SmartTar.
 
 The default `bash install.sh` route adds the SmartTar project's signed Pacman repository and installs the project package. System-level package and repository changes require administrator permission. Desktop preference setup and migration run afterward as the invoking normal user.
 
@@ -265,9 +267,18 @@ The v0.2.0 counts above are historical, not a count of the current test suite. U
 
 On November 25, 2026, the local v0.3.0 suite passed all 163 tests on Python 3.12 with the full-size regression enabled and no skips. The 44 added AppImage checks include isolated real `xdg-mime` resolution and a locally compiled synthetic marked runtime. The latter is deliberately started only after installation to check its executable copy and working directory. It is not a publisher AppImage compatibility test.
 
-Native CachyOS, KDE Plasma, and DEsk testing with real application archives and AppImages is still pending. I am keeping this release marked **Testing** until that behavior is verified on the laptop.
+The v0.4.0 source suite contains 306 tests, with skips depending on the environment and whether the large-file test is enabled. The Python 3.10, 3.12, and 3.14 GitHub jobs passed on November 25, 2026, including the archive larger than 1 GiB on Python 3.12. Arch package validation also passed, including 69 repository-bootstrap checks and validation against real `pacman-conf` output.
 
-The v0.4.0 package path additionally needs a verified signed publication, clean installation, migration from a per-user installation, an upgrade through Pacman, and removal that preserves unrelated configuration and installed apps. These are separate acceptance checks, not implied by passing archive or AppImage tests.
+The [successful production workflow](https://github.com/HaytamElbouhmidi/smarttar/actions/runs/45696716737) separately verified the published update channel:
+
+- Downloaded the public HTTPS package, database, and release manifest, then checked their signatures.
+- Installed `smarttar 0.4.0-1` through the real bootstrap with Python, KDialog, and xdg-utils present. `pacman -Qk` reported 15 files and no missing files.
+- Ran normal-user migration twice. Existing payloads, shortcuts, file-opening preferences, and the rollback record were preserved, with one recoverable backup of the earlier SmartTar script.
+- Completed a normal `pacman -Syu` with SmartTar already current. This is a no-op for SmartTar, not a production-to-production version-upgrade test.
+
+A separate isolated Pacman test upgraded a signed synthetic `0.3.0` package to `0.4.0` and rejected tampered packages, unsigned packages, and a tampered database. That test uses a disposable signing key. A later production release is needed to verify an upgrade between two production package versions. See the [release record](releases/v0.4.0-verification.json) for the exact evidence and scope.
+
+Native CachyOS, KDE Plasma, and DEsk testing with real application archives and AppImages is still pending. I am keeping this release marked **Testing** until that behavior is verified on the laptop.
 
 ## Performance measurements
 
@@ -307,7 +318,7 @@ To stop using the update source as well, use the latest extracted project folder
 sudo python3 tools/configure_repository.py --remove
 ```
 
-This is for the SmartTar-managed repository configuration, not unrelated Pacman settings. Repository removal is separate from package removal and key revocation. Do not remove a shared signing key as a shortcut for removing a repository entry.
+This removes only the SmartTar-managed repository configuration, not unrelated Pacman settings. It leaves the signing key and its existing trust in place. Repository removal is separate from package removal and key revocation. Do not remove a shared signing key as a shortcut for removing a repository entry.
 
 ### Manual installation
 

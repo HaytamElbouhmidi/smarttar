@@ -93,7 +93,7 @@ These are real SmartTar dialogs captured in an automated Ubuntu test session, no
 
 ## Installation
 
-**v0.4.0 rollout status:** The signed package-update route is staged. Repository publication and the first clean install, migration, and upgrade still need verification.
+**Package updates are available.** On November 25, 2026, the signed update source, fresh installation, and migration from an earlier setup passed an isolated Arch test. See the [successful verification run](https://github.com/HaytamElbouhmidi/smarttar/actions/runs/45696716737). Testing on a real CachyOS laptop is still needed.
 
 ### One-time setup
 
@@ -182,6 +182,8 @@ Yes. SmartTar uses one small Python program and the system's Python and KDE comp
 - Nothing stays running when SmartTar is closed.
 - An installed app opens directly, without starting SmartTar again.
 
+The published v0.4.0 package is 24,609 bytes, about 24 KiB. Pacman reports about 0.07 MiB installed for SmartTar itself. These figures exclude system dependencies and any apps you install with SmartTar.
+
 ## Why are there checks?
 
 The automated tests on GitHub run on GitHub's computers, not on yours. They are not run when you open a download. The installed app does not include or run the development tests, benchmarks, or screenshot tools.
@@ -196,7 +198,7 @@ See the [measurements and technical details](docs/TECHNICAL.md#performance-measu
 
 This is a testing release, so you may still run into problems. Automated checks do not replace testing on real CachyOS, KDE Plasma, and DEsk setups. SmartTar can install programs it recognizes as ready to use, not every possible archive or AppImage. A successful installation does not guarantee that the app has all the system libraries it needs to run.
 
-The v0.4.0 package setup and migration are staged for verification. The screenshots show the actual v0.3.0 app-installation dialogs, which are separate from the new package setup.
+The signed package setup and migration passed automated checks using the actual public update source. Because v0.4.0 is the first package release, updating from one published SmartTar version to another has not yet been tested. The screenshots show the actual v0.3.0 app-installation dialogs, which are separate from package setup.
 
 The detailed compatibility list, size limits, diagnostics, benchmark results, and removal instructions are in [the technical guide](docs/TECHNICAL.md). Package publishing and signing are covered in the [maintainer guide](docs/MAINTAINERS.md).
 

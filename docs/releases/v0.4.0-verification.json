@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "application_version": "0.4.0",
+  "package_version": "0.4.0-1",
+  "verification_date": "2026-11-25",
+  "evidence_kind": "Summary of observed workflow results and the signed release manifest",
+  "source_commit": "b01f9045235a1ba8dd692390ddd8a06cd07078c3",
+  "release_tag": "v0.4.0",
+  "distribution_commit": "9f33ae425b1ab6959601002e5a462221c77e14b9",
+  "repository_server": "https://raw.githubusercontent.com/HaytamElbouhmidi/smarttar/packages/any",
+  "signing_fingerprint": "89EFC028E6A2EF984615453D47B7FD7E5F99031F",
+  "package": "smarttar-0.4.0-1-any.pkg.tar.zst",
+  "package_sha256": "c3bbbb58dafe85532bcf3353a82022fb1d4e05bf31aabeb99c1100a8a86f9f4d",
+  "verification_workflow": "https://github.com/HaytamElbouhmidi/smarttar/actions/runs/45696716737",
+  "verification_workflow_commit": "1f2de85fb08e79255b1f6a2603b837c3369f5206",
+  "verification_workflow_conclusion": "success",
+  "checks": {
+    "public_https_database_signature": "passed",
+    "public_https_package_signature": "passed",
+    "public_https_release_manifest_signature": "passed",
+    "clean_install_using_repository_setup_helper": "passed",
+    "real_runtime_dependencies_present": ["python", "kdialog", "xdg-utils"],
+    "pacman_package_file_check": {"total_files": 15, "missing_files": 0},
+    "normal_user_migration": "passed",
+    "repeated_migration": "passed",
+    "existing_apps_shortcuts_and_preferences": "preserved",
+    "legacy_program": "preserved in a recoverable backup",
+    "ordinary_pacman_system_update": "passed with SmartTar already current",
+    "synthetic_older_package_to_release_upgrade": "passed with a disposable test signing key",
+    "tampered_package_rejection": "passed",
+    "unsigned_package_rejection": "passed",
+    "tampered_database_rejection": "passed"
+  },
+  "scope": {
+    "environment": "Disposable Arch Linux container on GitHub Actions",
+    "production_to_production_version_upgrade": "Not yet tested because this is the first production package",
+    "native_cachyos_kde_plasma_desk_desktop": "Still requires laptop verification",
+    "third_party_apps_receive_updates_from_this_repository": false
+  },
+  "verification_artifact": {
+    "name": "smarttar-release-verification",
+    "id": 15061461948,
+    "sha256": "d2d072efc40270426ad0d592b5402a8b386cd62fe01cf7f801176833045173ee",
+    "expires_at": "2026-12-25T20:38:29Z"
+  }
+}

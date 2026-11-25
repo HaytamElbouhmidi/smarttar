@@ -1,6 +1,6 @@
 # Package publishing and signing
 
-SmartTar v0.4.0 | Repository rollout staged for verification
+SmartTar v0.4.0 | Signed update channel verified November 25, 2026
 
 This guide covers the SmartTar update channel. Normal installation and use are described in the [README](../README.md).
 
@@ -14,7 +14,9 @@ The repository name is `smarttar`. The package server is:
 https://raw.githubusercontent.com/HaytamElbouhmidi/smarttar/packages/any
 ```
 
-Publish only a deliberately selected stable version tag. The workflow can start when that tag is pushed or be started manually for the same existing tag. An ordinary commit to `main` is not published as a package update. Keep the application version, package version, README, and changelog consistent. Increment the package release when repackaging the same application version requires a new package.
+Publish only a deliberately selected stable version tag. The workflow can start when that tag is pushed or be started manually for the same existing tag. An ordinary commit to `main` is not published as a package update. Keep the application version, package version, README, and changelog consistent.
+
+The current publication workflow accepts immutable `vX.Y.Z` application tags. Publish changed release contents under a new application version. A same-version package-only revision would need a deliberately reviewed release-selection convention as well as an increased `pkgrel`. Do not move an existing tag or silently overwrite an existing package to make that revision fit.
 
 The `packages` branch is artifact-only. It contains the signed package, repository database, release manifest, and accompanying signatures, not a working copy of the application source. Published package versions are not overwritten, and older package files are retained for clients using a cached database. An already-current rerun verifies the existing signed release instead of replacing it.
 
@@ -47,7 +49,7 @@ Key replacement is a separate trust change. Document the old and new full finger
 The workflow is **Publish SmartTar packages**, defined in [publish-packages.yml](../.github/workflows/publish-packages.yml).
 
 1. Finish reviewing the release, merge its changes into `main`, and check that application and package validation have passed for the intended source commit.
-2. Confirm that the application version, package recipe, and changelog agree. For this release, the stable tag is `v0.4.0`.
+2. Complete the [version checklist](#version-checklist) and confirm that the application version, package recipe, and changelog agree. For this release, the stable tag is `v0.4.0`.
 3. Create and push that tag so it resolves to the reviewed commit on `main`. Record the full commit identifier. Do not move an existing published release tag to different code.
 4. Open the repository's **Actions** tab and select **Publish SmartTar packages**. Pushing the tag starts it automatically. To start or repeat the release manually, select **Run workflow**, choose branch **main**, and enter `v0.4.0` in **release_tag**. The tag must already exist.
 5. Wait for the whole workflow to pass, including the checks of the published public repository. A completed build or signing step alone does not prove the update channel works.
@@ -57,7 +59,26 @@ The workflow validates the stable tag, matching version, and trusted `main` ance
 
 `SMARTTAR_SIGNING_KEY` is passed only to the signing step. The tested package, database, and manifest are signed and checked before one non-force update publishes the complete artifact snapshot. Ordinary `main` pushes do not trigger this publication workflow.
 
-For a rerun of an already-current release, leave the tag and package version unchanged. The publisher rechecks the retained signed files and reports that the release is already current. If the package contents need to change, publish a new package release or application version instead of overwriting the existing one.
+For a rerun of an already-current release, leave the tag and package version unchanged. The publisher rechecks the retained signed files and reports that the release is already current. If the package contents need to change, prepare a new release using the rules above instead of overwriting the existing one.
+
+### Version checklist
+
+The current build and validation scripts intentionally pin the release they test. Updating only `smarttar.py` or the package recipe is not enough. Before creating a future tag, review these together:
+
+| Location | Keep consistent |
+| --- | --- |
+| `smarttar.py`, `install.sh`, `uninstall.sh` | Application version, setup output, and current-version comments |
+| `packaging/arch/PKGBUILD.in`, `packaging/arch/smarttar`, `packaging/arch/README.install` | `pkgver`, `pkgrel`, launcher label, and installed guide |
+| `tools/build_package.sh` | `build_helper_version`, expected package filename, and recorded `package_release` |
+| `tools/test_arch_package.sh` | `test_version`, package metadata expectations, target version, and recorded release number |
+| `tools/test_live_repository.sh` | Accepted `SMARTTAR_EXPECTED_VERSION`, required Pacman package version, and expected release number |
+| `.github/workflows/packages.yml`, `.github/workflows/publish-packages.yml` | Package filename, release examples, and workflow version labels |
+| Other versioned tools and tests | Current helper versions, package filenames, and expected release records in `tools/` and `tests/` |
+| README, changelog, and release evidence | Current version, new behavior, actual verification results, and release links |
+
+Reset `pkgrel` to `1` for a new application version. If a package-only revision is deliberately supported later, update every hardcoded release-number check along with the recipe. Review version matches individually. Preserve older-version migration fixtures, historical benchmark records, and screenshot provenance instead of applying a blind replacement.
+
+Run the full application matrix and Arch package checks after these edits. For the first release after v0.4.0, add and record a real production-to-production upgrade check using the retained signed production package. The synthetic older-version test remains a separate regression check.
 
 ## Build and installed layout
 
@@ -77,7 +98,7 @@ The package owns `/usr/bin/smarttar`, `/usr/lib/smarttar/smarttar.py`, and `/usr
 
 ## Verify the published repository
 
-Do not mark the v0.4.0 repository setup as ready until the published files, not just local build outputs, pass these checks:
+For each release, verify the published files, not just local build outputs:
 
 - The public key matches the full fingerprint pinned by bootstrap.
 - Pacman accepts the package and repository database with trusted signatures required for both.
@@ -96,11 +117,21 @@ The workflow checks actual public HTTPS downloads after publishing, including th
 
 For the first production release, the subsequent `pacman -Syu` check is deliberately a no-op for SmartTar because the clean installation is already current. It is not evidence of a production-version upgrade. The actual older-version transition is tested separately using a synthetic `0.3.0` package and the `0.4.0` package with a disposable signing key. A future production release is needed to verify a real production-to-production upgrade.
 
+### Verified v0.4.0 release
+
+The [production verification run](https://github.com/HaytamElbouhmidi/smarttar/actions/runs/45696716737) passed on November 25, 2026. It verified public package, database, and manifest signatures, installed `0.4.0-1` with the real runtime dependencies, checked all 15 package files, and ran normal-user migration twice without losing existing apps, shortcuts, preferences, or the original rollback record. Only one legacy-script backup was created. The following full-system update completed with SmartTar already current.
+
+- Source tag: `v0.4.0`, commit `b01f9045235a1ba8dd692390ddd8a06cd07078c3`.
+- Published package snapshot: `9f33ae425b1ab6959601002e5a462221c77e14b9` on `packages`.
+- Verification workflow revision: `1f2de85fb08e79255b1f6a2603b837c3369f5206`. Its post-tag correction initializes the disposable container's Pacman keyring. The released application is unchanged.
+
+The [release verification record](releases/v0.4.0-verification.json) preserves the package hash, signing fingerprint, workflow link, and scope. Python 3.10, 3.12, and 3.14 validation and the Arch package checks passed separately. The source suite contains 306 tests with environment-dependent skips, and the Arch bootstrap checks include 69 tests. The release remains **Testing** until native CachyOS, KDE Plasma, and DEsk behavior is verified on the laptop.
+
 ## If publication fails
 
 Do not announce an update before the signed repository is available and verified. Preserve the last complete working repository snapshot. A transient download or cache mismatch must fail safely and be retried after the publication is consistent, not worked around by weakening signature policy.
 
-Do not republish changed package bytes under an already published version and package release. Issue a new package release or application version as appropriate and record what changed.
+Do not republish changed package bytes under an already published version and package release. Use a new application version with the current tag workflow, or first establish the reviewed package-only revision procedure described above. Record what changed.
 
 If the signing key might be exposed, stop publishing with it and handle key revocation and replacement as an explicit incident. Do not put the private key or recovery material in an issue or commit while investigating.
 
