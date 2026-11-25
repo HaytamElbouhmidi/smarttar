@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "version": "0.4.0",
+  "package_release": 1,
+  "tag": "v0.4.0",
+  "source_commit": "b01f9045235a1ba8dd692390ddd8a06cd07078c3",
+  "source_sha256": "d0c29b9313a7bd748946c6ca15d4c0a573a21f6a0a91eefbd6e24e0ec3f774ba",
+  "package": "smarttar-0.4.0-1-any.pkg.tar.zst",
+  "package_sha256": "c3bbbb58dafe85532bcf3353a82022fb1d4e05bf31aabeb99c1100a8a86f9f4d",
+  "signing_fingerprint": "89EFC028E6A2EF984615453D47B7FD7E5F99031F",
+  "published_utc": "2026-11-25T20:35:07.457171+00:00",
+  "package_upgrade_tests": "passed with a disposable test signing key before production signing"
+}
