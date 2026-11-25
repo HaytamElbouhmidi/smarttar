@@ -37,8 +37,8 @@ then
     exit 2
 fi
 
-# These confirmations apply only to the clean disposable test container.
-printf 'y\ny\n' | /usr/bin/python3 "$script_dir/configure_repository.py" --key "$public_key"
+# Each answer is sent only after its own prompt in the disposable test container.
+/usr/bin/python3 "$script_dir/confirm_repository_test.py" "$script_dir/configure_repository.py" "$public_key"
 test "$(pacman -Q smarttar)" = "smarttar ${SMARTTAR_EXPECTED_VERSION}-1"
 for dependency in python kdialog xdg-utils
 do
