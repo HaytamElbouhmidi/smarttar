@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SmartTar v0.3.0 real KDialog screenshot capture by Haytam Elbouhmidi.
+"""SmartTar v0.4.0 real KDialog screenshot capture by Haytam Elbouhmidi.
 
 I capture actual SmartTar windows in a private Xvfb/Openbox test session.
 The archive and AppImage header fixtures are synthetic and never executed.
@@ -29,7 +29,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 REPOSITORY = Path(__file__).resolve().parents[1]
 SCREENSHOTS = (
     ("--menu", "01-main-menu.png", "install\n", "Choose what to do with a downloaded archive."),
@@ -81,11 +81,33 @@ def stop_process(process: subprocess.Popen, *, group: bool = False) -> None:
         process.wait(timeout=3)
 
 
-def window_for(process: subprocess.Popen, title: str, diagnostics: dict[str, str] | None = None) -> str:
+def owned_window_details(process: subprocess.Popen) -> list[dict[str, str]]:
+    result = command("xdotool", "search", "--all", "--pid", str(process.pid), check=False)
+    details = []
+    for window in result.stdout.split()[:8] if result.returncode == 0 else []:
+        if not window.isdigit():
+            continue
+        owner = command("xdotool", "getwindowpid", window, check=False)
+        if owner.returncode or owner.stdout.strip() != str(process.pid):
+            continue
+        title = command("xdotool", "getwindowname", window, check=False)
+        geometry = command("xdotool", "getwindowgeometry", "--shell", window, check=False)
+        details.append({
+            "window": window,
+            "title": title.stdout[:512].strip(),
+            "geometry": geometry.stdout[:1024].strip(),
+        })
+    return details
+
+
+def window_for(
+    process: subprocess.Popen, title: str, diagnostics: dict[str, object] | None = None,
+    *, timeout_seconds: float = 10,
+) -> str:
     diagnostics = diagnostics if diagnostics is not None else {}
     diagnostics["expected_title"] = repr(title)
     diagnostics["controlled_pid"] = str(process.pid)
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise CaptureError("KDialog exited before its window could be captured.")
@@ -121,7 +143,8 @@ def window_for(process: subprocess.Popen, title: str, diagnostics: dict[str, str
                     raise CaptureError("KDialog exited before painting completed.")
                 return window
         time.sleep(0.1)
-    raise CaptureError("No acceptable visible KDialog window appeared within 10 seconds.")
+    diagnostics["owned_window_probe"] = owned_window_details(process)
+    raise CaptureError(f"No acceptable visible KDialog window appeared within {timeout_seconds:g} seconds.")
 
 
 def log_tail(path: Path) -> str:
@@ -133,6 +156,21 @@ def log_tail(path: Path) -> str:
         return "\n".join(lines[-12:]) or "(empty)"
     except OSError as exc:
         return f"(unavailable: {exc})"
+
+
+def wait_for_manager(process: subprocess.Popen, session: Path) -> None:
+    deadline = time.monotonic() + 10
+    state = "No desktop count has been reported."
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise CaptureError(f"Openbox exited during startup: {log_tail(session / 'openbox.log')!r}")
+        result = command("xdotool", "get_num_desktops", check=False)
+        count = result.stdout.strip()
+        if result.returncode == 0 and count.isdigit() and int(count) > 0:
+            return
+        state = f"exit {result.returncode}, output {result.stdout[-512:]!r}, error {result.stderr[-512:]!r}"
+        time.sleep(0.1)
+    raise CaptureError(f"Openbox did not become ready: {state}. Log tail: {log_tail(session / 'openbox.log')!r}")
 
 
 def verify_png(path: Path) -> tuple[int, int]:
@@ -158,7 +196,7 @@ def make_example(archive: Path) -> None:
         raise CaptureError("The trusted /usr/bin/true fixture is not a Linux ELF executable.")
     files = (
         ("Example-App/example-app", payload, 0o755),
-        ("Example-App/README.txt", b"SmartTar v0.3.0 screenshot fixture. This example is not run.\n", 0o644),
+        ("Example-App/README.txt", b"SmartTar v0.4.0 screenshot fixture. This example is not run.\n", 0o644),
     )
     with tarfile.open(archive, "w:gz") as stream:
         for name, contents, mode in files:
@@ -219,7 +257,7 @@ def capture_session(session: Path, output: Path) -> None:
             except OSError as exc:
                 raise CaptureError(f"{stage}: could not start KDialog: {exc}") from exc
             try:
-                window = window_for(process, title, diagnostics)
+                window = window_for(process, title, diagnostics, timeout_seconds=20 if index == 0 else 10)
                 if command("xdotool", "getwindowpid", window).stdout.strip() != str(process.pid):
                     raise CaptureError("The controlled window changed before capture.")
                 path = output / filename
@@ -249,6 +287,7 @@ def capture_session(session: Path, output: Path) -> None:
     with (session / "openbox.log").open("w", encoding="utf-8") as log:
         manager = subprocess.Popen(["openbox", "--sm-disable"], stdout=log, stderr=log)
         try:
+            wait_for_manager(manager, session)
             with patch.object(smarttar, "dialog", side_effect=capture_dialog), \
                     patch.object(smarttar, "app_root", return_value=install_root), \
                     patch.object(smarttar, "application_dir", return_value=launcher_root):

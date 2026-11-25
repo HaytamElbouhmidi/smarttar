@@ -1,0 +1,148 @@
+# SmartTar v0.4.0 trusted-release package publication
+name: Publish SmartTar packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing stable release tag, for example v0.4.0'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smarttar-package-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'HaytamElbouhmidi/smarttar' && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    container: archlinux:base-devel
+    permissions:
+      contents: write
+    steps:
+      - name: Install build and verification tools in the disposable container
+        run: pacman -Syu --noconfirm --needed python kdialog xdg-utils desktop-file-utils git github-cli
+      - name: Load publication tools from trusted main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          path: control
+          persist-credentials: false
+      - name: Validate the requested release before executing its code
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          install -d /tmp/smarttar-release-output
+          python3 control/tools/publish_package_repository.py validate-release \
+            --repository control --tag "$RELEASE_TAG" \
+            --output /tmp/smarttar-release-output/verified-release.json
+      - name: Check out only the validated release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release.outputs.commit }}
+          path: release
+          persist-credentials: false
+      - name: Create the unprivileged package builder and stage fixed inputs
+        run: |
+          useradd --create-home smarttar-build
+          install -d -o smarttar-build -g smarttar-build /tmp/smarttar-package-output /tmp/smarttar-build-source
+          for source_file in smarttar.py LICENSE tools/build_package.sh packaging/arch/PKGBUILD.in packaging/arch/smarttar packaging/arch/smarttar-handler.desktop packaging/arch/README.install
+          do
+            install -Dm644 "release/$source_file" "/tmp/smarttar-build-source/$source_file"
+          done
+          chown -R smarttar-build:smarttar-build /tmp/smarttar-build-source
+      - name: Run all application regressions without release credentials
+        env:
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          install -d -o smarttar-build -g smarttar-build /tmp/smarttar-regression-source
+          git -C release archive --format=tar --output=/tmp/smarttar-regression-source.tar "$RELEASE_COMMIT"
+          chmod 644 /tmp/smarttar-regression-source.tar
+          runuser -u smarttar-build -- tar --extract --no-same-owner --file /tmp/smarttar-regression-source.tar --directory /tmp/smarttar-regression-source
+          runuser -u smarttar-build -- sh -c 'cd /tmp/smarttar-regression-source && python3 -m unittest discover -s tests -v'
+      - name: Build the selected release without root
+        run: runuser -u smarttar-build -- bash /tmp/smarttar-build-source/tools/build_package.sh /tmp/smarttar-package-output
+      - name: Test a signed upgrade with a disposable test key
+        env:
+          SMARTTAR_DISPOSABLE_CONTAINER: '1'
+          SMARTTAR_BUILD_USER: smarttar-build
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          PACKAGE_RELEASE: ${{ steps.release.outputs.package_release }}
+        run: bash release/tools/test_arch_package.sh "/tmp/smarttar-package-output/smarttar-$RELEASE_VERSION-$PACKAGE_RELEASE-any.pkg.tar.zst"
+      - name: Read the current artifact-only distribution branch
+        run: |
+          git init /tmp/smarttar-distribution
+          git -C /tmp/smarttar-distribution remote add origin https://github.com/HaytamElbouhmidi/smarttar.git
+          if git ls-remote --exit-code --heads https://github.com/HaytamElbouhmidi/smarttar.git refs/heads/packages > /tmp/smarttar-distribution-ref
+          then
+            git -C /tmp/smarttar-distribution fetch --depth=1 origin refs/heads/packages
+            git -C /tmp/smarttar-distribution checkout -b packages FETCH_HEAD
+          else
+            remote_status=$?
+            if [ "$remote_status" -ne 2 ]
+            then
+              exit "$remote_status"
+            fi
+            git -C /tmp/smarttar-distribution checkout --orphan packages
+          fi
+      - name: Sign only the tested release and its catalogue
+        env:
+          SMARTTAR_SIGNING_KEY: ${{ secrets.SMARTTAR_SIGNING_KEY }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          PACKAGE_RELEASE: ${{ steps.release.outputs.package_release }}
+        run: |
+          python3 control/tools/publish_package_repository.py publish \
+            --package "/tmp/smarttar-package-output/smarttar-$RELEASE_VERSION-$PACKAGE_RELEASE-any.pkg.tar.zst" \
+            --test-report /tmp/smarttar-package-output/package-test.json \
+            --public-key release/packaging/keys/smarttar.asc \
+            --verified-release /tmp/smarttar-release-output/verified-release.json \
+            --repository /tmp/smarttar-distribution \
+            --result /tmp/smarttar-release-output/publication.json
+      - name: Publish the signed artifacts in one non-force branch update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          PACKAGE_RELEASE: ${{ steps.release.outputs.package_release }}
+        run: |
+          git -C /tmp/smarttar-distribution config user.name 'github-actions[bot]'
+          git -C /tmp/smarttar-distribution config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C /tmp/smarttar-distribution add -- README.md any
+          if ! git -C /tmp/smarttar-distribution diff --cached --quiet
+          then
+            git -C /tmp/smarttar-distribution commit -m "Publish SmartTar $RELEASE_VERSION-$PACKAGE_RELEASE"
+            git -C /tmp/smarttar-distribution -c credential.helper='!gh auth git-credential' push origin HEAD:refs/heads/packages
+          fi
+      - name: Verify public HTTPS package and catalogue signatures
+        run: |
+          python3 control/tools/publish_package_repository.py verify-live \
+            --public-key release/packaging/keys/smarttar.asc \
+            --verified-release /tmp/smarttar-release-output/verified-release.json \
+            --output /tmp/smarttar-release-output/live-signatures.json
+      - name: Verify live repository setup and desktop-user migration
+        env:
+          SMARTTAR_DISPOSABLE_CONTAINER: '1'
+          SMARTTAR_BUILD_USER: smarttar-build
+          SMARTTAR_EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+          SMARTTAR_PUBLIC_KEY: ${{ github.workspace }}/release/packaging/keys/smarttar.asc
+          SMARTTAR_LIVE_RESULT: /tmp/smarttar-release-output/live-system-test.json
+        run: bash release/tools/test_live_repository.sh
+      - name: Save public release verification records
+        uses: actions/upload-artifact@v7
+        with:
+          name: smarttar-release-verification
+          path: |
+            /tmp/smarttar-release-output/*.json
+            /tmp/smarttar-package-output/package-build.json
+            /tmp/smarttar-package-output/package-test.json
+          if-no-files-found: error
+          retention-days: 30

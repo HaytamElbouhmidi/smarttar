@@ -154,7 +154,8 @@ def download(name, maximum):
 
 def verify_signature_status(status_text):
     records = [line.split() for line in status_text.splitlines() if line.startswith("[GNUPG:] ")]
-    forbidden = {"BADSIG", "ERRSIG", "EXPSIG", "EXPKEYSIG", "REVKEYSIG", "NO_PUBKEY", "NODATA", "FAILURE"}
+    forbidden = {"BADSIG", "ERRSIG", "EXPSIG", "EXPKEYSIG", "REVKEYSIG", "NO_PUBKEY", "NODATA",
+                 "KEYEXPIRED", "SIGEXPIRED", "KEYREVOKED", "FAILURE", "ERROR"}
     if any(len(row) > 1 and row[1] in forbidden for row in records):
         raise SetupError("The update information has an invalid signature.")
     valid = [row for row in records if len(row) > 2 and row[1] == "VALIDSIG"]
@@ -359,10 +360,10 @@ def install_repository(key_path, config=CONFIG):
             raise SetupError("Setup cancelled. No system settings or user preferences were changed.")
         replacement = config_with_block(original)
         backup = backup_config(original) if replacement != original else None
-        run_tool("pacman-key", "--config", config, "--add", snapshot)
-        run_tool("pacman-key", "--config", config, "--lsign-key", FINGERPRINT)
         changed = replacement != original
         try:
+            run_tool("pacman-key", "--config", config, "--add", snapshot)
+            run_tool("pacman-key", "--config", config, "--lsign-key", FINGERPRINT)
             if changed:
                 atomic_config_write(config, original, replacement, details)
             check_effective_config(config, True)
@@ -379,7 +380,7 @@ def install_repository(key_path, config=CONFIG):
                         print(f"Pacman settings changed separately. Restore only after reviewing the backup: {backup}", file=sys.stderr)
                 except (SetupError, OSError):
                     print(f"Automatic settings recovery could not finish. Review this backup before continuing: {backup}", file=sys.stderr)
-            print("The public signing key remains in Pacman's keyring. No user app files or preferences were changed by this helper.", file=sys.stderr)
+            print("Any public signing key imported by this setup remains in Pacman's keyring. No user app files or preferences were changed by this helper.", file=sys.stderr)
             raise
         if backup:
             print(f"Previous Pacman settings saved at {backup}")

@@ -32,5 +32,7 @@ jobs:
       - name: Verify shell syntax
         run: bash -n install.sh uninstall.sh
       - name: Run unit and integration tests
+        env:
+          SMARTTAR_RUN_LARGE_TESTS: ${{ matrix.python-version == '3.12' && '1' || '0' }}
         run: python3 -m unittest discover -s tests -v
 
