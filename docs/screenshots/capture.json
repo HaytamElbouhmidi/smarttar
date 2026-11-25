@@ -1,35 +1,63 @@
 {
-  "capture_helper_version": "0.2.0",
-  "smarttar_version": "0.2.0",
-  "captured_utc": "2026-10-29T17:50:33.522138+00:00",
-  "source_revision": "d19fbe735a33a4ca043267577639a2e3620e5d6c",
+  "capture_helper_version": "0.3.0",
+  "smarttar_version": "0.3.0",
+  "captured_utc": "2026-11-25T19:31:36.767743+00:00",
+  "source_revision": "61824e112d26ca325d670fc40f284b1b3005c5e3",
   "operating_system": "Ubuntu 24.04.5 LTS",
   "display": "Dedicated Xvfb with Openbox and Qt Fusion style",
-  "provenance": "Actual SmartTar KDialog windows captured in an automated Linux Xvfb/Openbox session using a harmless example archive. Responses were supplied by the capture helper. No application from the archive was run. Appearance may differ on CachyOS, KDE Plasma, or DEsk.",
+  "provenance": "Actual SmartTar KDialog windows captured in an automated Linux Xvfb/Openbox session using a harmless example archive and a synthetic AppImage header fixture. Responses were supplied by the capture helper. Neither fixture was executed. The AppImage fixture is not a complete publisher AppImage or a runtime compatibility test. Appearance may differ on CachyOS, KDE Plasma, or DEsk.",
   "fixture": "Synthetic Example-App.tar.gz containing a copy of /usr/bin/true, never executed",
+  "appimage_fixture": "Synthetic AppImage header fixture made from a copy of /usr/bin/true with an AI type 2 marker, never executed. Not a complete publisher AppImage or a runtime compatibility test.",
   "responses": "Supplied by the helper after each actual window was captured",
   "native_cachyos_kde_desk_validation": false,
   "screenshots": [
     {
       "file": "01-main-menu.png",
       "caption": "Choose what to do with a downloaded archive.",
+      "fixture": "Synthetic archive",
       "width": 280,
       "height": 338,
-      "sha256": "09e60928b27c184d9153738161f6c1b965b753903450bc63c974b021a446f9bb"
+      "sha256": "ba161c86e09448a3b6ecb718d18d6f3eab696a28871d8696372279c051990299"
     },
     {
       "file": "02-install-confirmation.png",
       "caption": "Review the application and destination before installing.",
+      "fixture": "Synthetic archive",
       "width": 702,
       "height": 159,
-      "sha256": "2df0f604d9192621c92373fcbe2ecf51e8c20397c065dd491f917cf43c8ff45d"
+      "sha256": "5d76ac994377aeed897f8d60a022fa0f75cefad84567e85acbcc516be1267116"
     },
     {
       "file": "03-install-complete.png",
       "caption": "The example application has been copied into the private test directory.",
-      "width": 461,
+      "fixture": "Synthetic archive",
+      "width": 457,
       "height": 142,
-      "sha256": "14aed8efc02b2db536fe00f8ff2cb9007c2cb466ae3c776fa1dd0a04a1bc2e94"
+      "sha256": "cfaec62ba396d08453f249ae4fe565cc21bb2b306d26ae651f5de6d2198225fc"
+    },
+    {
+      "file": "04-appimage-menu.png",
+      "caption": "Choose to install the synthetic AppImage header fixture.",
+      "fixture": "Synthetic AppImage header fixture",
+      "width": 280,
+      "height": 338,
+      "sha256": "27752e7be4af7910fa4e786c3a0d491037bf917e234b87e5f153608bf256c290"
+    },
+    {
+      "file": "05-appimage-confirmation.png",
+      "caption": "Review the AppImage copy and application-menu shortcut before installing.",
+      "fixture": "Synthetic AppImage header fixture",
+      "width": 581,
+      "height": 244,
+      "sha256": "f7be659791ec9a41146fbb218d1266b7f1243b8cd6659c4911ee104ace275220"
+    },
+    {
+      "file": "06-appimage-complete.png",
+      "caption": "The synthetic AppImage header fixture has been copied without running it.",
+      "fixture": "Synthetic AppImage header fixture",
+      "width": 498,
+      "height": 159,
+      "sha256": "7bd43b982b4d6497b82d8d6f57850a73f10c670a71f7b1bdfdd7107acb300e42"
     }
   ]
 }

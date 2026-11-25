@@ -55,7 +55,7 @@ Large archives can take time to check before the first window appears. AppImage 
 
 ## Screenshots
 
-These screenshots show the archive-installation flow in v0.2.0. The AppImage option added in v0.3.0 uses the same native dialog style but is not pictured here.
+These screenshots show SmartTar v0.3.0 installing an archive and an AppImage. Both flows ask for confirmation before installation.
 
 ### Choose what to do
 
@@ -75,7 +75,21 @@ After installation, SmartTar confirms that the app has an entry in the applicati
 
 ![SmartTar confirming successful installation and the application-menu entry](docs/screenshots/03-install-complete.png)
 
-These are real SmartTar dialogs captured in an automated Ubuntu test session with an example app, not mockups. Colors and window borders depend on your desktop theme. The temporary destination shown is only for the test. See the [capture details](docs/screenshots/capture.json).
+### Install an AppImage
+
+Right-click the downloaded file, open it with SmartTar, and choose **Install AppImage**.
+
+![SmartTar offering to install an example AppImage or explain how installation works](docs/screenshots/04-appimage-menu.png)
+
+Review where the app will be saved and choose **Yes** if you trust the download. SmartTar copies the file and adds a menu shortcut without starting the app.
+
+![SmartTar asking for confirmation before copying an AppImage and adding its menu shortcut](docs/screenshots/05-appimage-confirmation.png)
+
+Open the new entry in your application menu when you are ready to use it. Your original download is still where you left it.
+
+![SmartTar confirming that the AppImage is installed and the original download is unchanged](docs/screenshots/06-appimage-complete.png)
+
+These are real SmartTar dialogs captured in an automated Ubuntu test session, not mockups. The example downloads are synthetic test files, so these images demonstrate the installer rather than a particular app's ability to run. Colors and window borders depend on your desktop theme. The temporary destination shown is only for the test. See the [capture details](docs/screenshots/capture.json).
 
 ## Installation
 
@@ -149,7 +163,7 @@ The automated tests on GitHub run on GitHub's computers, not on yours. They are 
 
 SmartTar does check each archive before installation and while unpacking it. This helps catch damaged files, unsafe paths, and accidental overwrites. These checks add some processing time for large downloads, but there is no background scanning.
 
-AppImages take a shorter route. SmartTar checks the file header and processor type, then copies the file once when you confirm. It calculates a file fingerprint during that same copy, without a separate full-file scan. It does not run the AppImage to inspect it or extract an icon. The menu entry uses a generic application icon.
+AppImages take a shorter route. SmartTar checks the file header and processor type, then copies the file once when you confirm. It checks for changes during that same copy, without a separate full-file scan. It does not run the AppImage to inspect it or extract an icon. The menu entry uses a generic application icon.
 
 See the [measurements and technical details](docs/TECHNICAL.md#performance-measurements) if you want the numbers.
 
