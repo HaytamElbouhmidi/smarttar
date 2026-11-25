@@ -81,7 +81,10 @@ def stop_process(process: subprocess.Popen, *, group: bool = False) -> None:
         process.wait(timeout=3)
 
 
-def window_for(process: subprocess.Popen, title: str) -> str:
+def window_for(process: subprocess.Popen, title: str, diagnostics: dict[str, str] | None = None) -> str:
+    diagnostics = diagnostics if diagnostics is not None else {}
+    diagnostics["expected_title"] = repr(title)
+    diagnostics["controlled_pid"] = str(process.pid)
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -91,6 +94,9 @@ def window_for(process: subprocess.Popen, title: str) -> str:
             "--name", "^" + re.escape(title) + "($|[[:space:]])", check=False,
         )
         matches = result.stdout.split() if result.returncode == 0 else []
+        diagnostics["last_search"] = (
+            f"exit {result.returncode}, matches {len(matches)}, stderr {result.stderr[-1024:]!r}"
+        )
         if len(matches) > 1:
             raise CaptureError("More than one window matched the controlled KDialog process.")
         if matches:
@@ -103,13 +109,30 @@ def window_for(process: subprocess.Popen, title: str) -> str:
             values = dict(line.split("=", 1) for line in geometry.splitlines() if "=" in line)
             width = int(values.get("WIDTH", "0"))
             height = int(values.get("HEIGHT", "0"))
+            window_title = command("xdotool", "getwindowname", window, check=False)
+            diagnostics["last_owned_window"] = (
+                f"id {window}, geometry {geometry[:1024]!r}, "
+                f"title {window_title.stdout[:512].strip()!r}, title query exit {window_title.returncode}"
+            )
+            diagnostics["accepted_geometry"] = "width 120..1440, height 70..1000"
             if 120 <= width <= 1440 and 70 <= height <= 1000:
                 time.sleep(0.4)
                 if process.poll() is not None:
                     raise CaptureError("KDialog exited before painting completed.")
                 return window
         time.sleep(0.1)
-    raise CaptureError("No visible KDialog window appeared within 10 seconds.")
+    raise CaptureError("No acceptable visible KDialog window appeared within 10 seconds.")
+
+
+def log_tail(path: Path) -> str:
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - 4096))
+            lines = stream.read(4096).decode("utf-8", errors="replace").splitlines()
+        return "\n".join(lines[-12:]) or "(empty)"
+    except OSError as exc:
+        return f"(unavailable: {exc})"
 
 
 def verify_png(path: Path) -> tuple[int, int]:
@@ -174,19 +197,29 @@ def capture_session(session: Path, output: Path) -> None:
     launcher_root = session / "Desktop-Entries"
 
     def capture_dialog(*args: str) -> subprocess.CompletedProcess[str]:
-        if manager.poll() is not None:
-            raise CaptureError("The isolated Openbox window manager exited before capture.")
         index = len(records)
         if index >= len(SCREENSHOTS):
             raise CaptureError("SmartTar displayed an unexpected additional dialog.")
         option, filename, response, caption = SCREENSHOTS[index]
+        stage = f"Dialog {index + 1}/{len(SCREENSHOTS)} ({filename})"
+        if manager.poll() is not None:
+            raise CaptureError(
+                f"{stage}: the isolated Openbox window manager exited before capture.\n"
+                f"Openbox log tail: {log_tail(session / 'openbox.log')!r}"
+            )
         if not args or args[0] != option:
-            raise CaptureError(f"Expected {option}, received {args!r}.")
+            raise CaptureError(f"{stage}: expected {option}, received {args!r}.")
         invocation = ["kdialog", "--title", title, *args]
-        with (session / f"dialog-{index + 1}.log").open("w", encoding="utf-8") as log:
-            process = subprocess.Popen(invocation, stdout=log, stderr=log)
+        log_path = session / f"dialog-{index + 1}.log"
+        diagnostics = {}
+        print(f"Capturing {stage}", flush=True)
+        with log_path.open("w", encoding="utf-8") as log:
             try:
-                window = window_for(process, title)
+                process = subprocess.Popen(invocation, stdout=log, stderr=log)
+            except OSError as exc:
+                raise CaptureError(f"{stage}: could not start KDialog: {exc}") from exc
+            try:
+                window = window_for(process, title, diagnostics)
                 if command("xdotool", "getwindowpid", window).stdout.strip() != str(process.pid):
                     raise CaptureError("The controlled window changed before capture.")
                 path = output / filename
@@ -200,6 +233,15 @@ def capture_session(session: Path, output: Path) -> None:
                     "height": height,
                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 })
+                print(f"Captured {filename}: {width} x {height}", flush=True)
+            except (CaptureError, OSError, ValueError, subprocess.SubprocessError) as exc:
+                stop_process(process)
+                log.flush()
+                window_details = json.dumps(diagnostics, ensure_ascii=True, sort_keys=True)
+                raise CaptureError(
+                    f"{stage}: {exc}\nWindow diagnostics: {window_details}\n"
+                    f"Controlled KDialog log tail: {log_tail(log_path)!r}"
+                ) from exc
             finally:
                 stop_process(process)
         return subprocess.CompletedProcess(invocation, 0, response, "")

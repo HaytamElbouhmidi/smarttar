@@ -1100,9 +1100,11 @@ def run_appimage_gui(image: Path) -> None:
         if selection == "guide":
             notify(
                 "An AppImage is a Linux program packaged as one file.\n\n"
-                "SmartTar copies it to your app folder and adds an application-menu shortcut. "
-                "The original download stays unchanged. The app does not run until you open its shortcut.\n\n"
-                "Only install downloads from a publisher you trust. Format checks are not a virus scan. "
+                "SmartTar copies it to your app folder and adds a menu shortcut.\n"
+                "The original download stays unchanged.\n"
+                "The app does not run until you open its shortcut.\n\n"
+                "Only install downloads from a publisher you trust.\n"
+                "Format checks are not a virus scan.\n"
                 "Some apps still need system libraries or FUSE support."
             )
         elif selection == "install":
@@ -1110,9 +1112,11 @@ def run_appimage_gui(image: Path) -> None:
             confirm = dialog(
                 "--yesno",
                 f"Install: {info.image.name}\nDestination: {target}\n\n"
-                "SmartTar will copy this AppImage, make the copy executable, and add an application-menu shortcut. "
+                "SmartTar will copy this AppImage, make the copy executable,\n"
+                "and add an application-menu shortcut.\n"
                 "Your original download stays unchanged.\n\n"
-                "Only install software from a source you trust. This application can access your files when you launch it. "
+                "Only install software from a source you trust.\n"
+                "This application can access your files when you launch it.\n"
                 "It will not start during installation.",
             )
             if confirm.returncode == 0:
