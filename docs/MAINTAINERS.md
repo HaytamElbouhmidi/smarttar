@@ -14,7 +14,9 @@ The repository name is `smarttar`. The package server is:
 https://raw.githubusercontent.com/HaytamElbouhmidi/smarttar/packages/any
 ```
 
-Publish only a deliberately selected version tag or manually selected release revision. An ordinary source commit is not an update release. Keep the application version, package version, README, and changelog consistent. Increment the package release when repackaging the same application version requires a new package.
+Publish only a deliberately selected stable version tag. The workflow can start when that tag is pushed or be started manually for the same existing tag. An ordinary commit to `main` is not published as a package update. Keep the application version, package version, README, and changelog consistent. Increment the package release when repackaging the same application version requires a new package.
+
+The `packages` branch is artifact-only. It contains the signed package, repository database, release manifest, and accompanying signatures, not a working copy of the application source. Published package versions are not overwritten, and older package files are retained for clients using a cached database. An already-current rerun verifies the existing signed release instead of replacing it.
 
 Pacman distributes SmartTar updates during the user's normal system update. There is no SmartTar background service, update timer, or launch-time update request. This channel does not update third-party apps copied into place by SmartTar.
 
@@ -28,7 +30,7 @@ The public key is stored at `packaging/keys/smarttar.asc`. The pinned full finge
 
 The bootstrap must compare the public key's full fingerprint with that pin before granting trust. Keep the pin and exported public key consistent. The public key can be committed. Its private counterpart must never be committed.
 
-The private signing key belongs in the designated GitHub Actions secret, not in source control. Never print it in a workflow log or include it in a package, release asset, screenshot, or diagnostic artifact. Use a private temporary keyring during release jobs and remove it when the job finishes. Retain any necessary recovery material outside the public repository.
+The private signing key is supplied through the repository's GitHub Actions secret `SMARTTAR_SIGNING_KEY`, which is already configured. It is not source code and must never be committed. Never print it in a workflow log or include it in a package, release asset, screenshot, or diagnostic artifact. The release job uses a private temporary keyring and removes it afterward. Retain any necessary recovery material outside the public repository.
 
 Both the package files and the repository database require trusted signatures:
 
@@ -40,18 +42,22 @@ The public repository must never fall back to optional or disabled signature ver
 
 Key replacement is a separate trust change. Document the old and new full fingerprints, update the bootstrap pin, and provide an explicit transition procedure. Do not silently trust a different key downloaded from the package server.
 
-## Before publishing
+## Publish a release
 
-1. Review the selected source revision and record its immutable commit identifier.
-2. Confirm that its declared application and package versions agree with the release notes.
-3. Run the application tests and packaging checks for that revision.
-4. Build the package in a clean Arch-compatible environment.
-5. Confirm the package includes only intended files and declares its runtime requirements.
-6. Sign the package and the repository database with the expected release key.
-7. Independently verify the exported signatures and expected fingerprint before publishing.
-8. Publish the complete repository snapshot, with packages, signatures, and metadata together. Do not replace a release with a different package using the same version and release number.
+The workflow is **Publish SmartTar packages**, defined in [publish-packages.yml](../.github/workflows/publish-packages.yml).
 
-Repository-write permission and signing-secret access should be limited to the release job. Source validation does not need either. Review the workflow and the selected release revision before granting a job access to the signing secret.
+1. Finish reviewing the release, merge its changes into `main`, and check that application and package validation have passed for the intended source commit.
+2. Confirm that the application version, package recipe, and changelog agree. For this release, the stable tag is `v0.4.0`.
+3. Create and push that tag so it resolves to the reviewed commit on `main`. Record the full commit identifier. Do not move an existing published release tag to different code.
+4. Open the repository's **Actions** tab and select **Publish SmartTar packages**. Pushing the tag starts it automatically. To start or repeat the release manually, select **Run workflow**, choose branch **main**, and enter `v0.4.0` in **release_tag**. The tag must already exist.
+5. Wait for the whole workflow to pass, including the checks of the published public repository. A completed build or signing step alone does not prove the update channel works.
+6. Download the **smarttar-release-verification** artifact from the successful run and keep its release evidence. Only then announce that the package update is available.
+
+The workflow validates the stable tag, matching version, and trusted `main` ancestry before running the selected release code. It runs the application regression suite, builds as a non-root user, and tests a signed package upgrade with a disposable test key before the production signing key is made available.
+
+`SMARTTAR_SIGNING_KEY` is passed only to the signing step. The tested package, database, and manifest are signed and checked before one non-force update publishes the complete artifact snapshot. Ordinary `main` pushes do not trigger this publication workflow.
+
+For a rerun of an already-current release, leave the tag and package version unchanged. The publisher rechecks the retained signed files and reports that the release is already current. If the package contents need to change, publish a new package release or application version instead of overwriting the existing one.
 
 ## Build and installed layout
 
@@ -79,12 +85,16 @@ Do not mark the v0.4.0 repository setup as ready until the published files, not 
 - A missing or invalid database signature fails instead of being bypassed.
 - A clean installation receives SmartTar and its declared dependencies.
 - Migration from an earlier per-user installation preserves its existing apps, shortcuts, and association rollback information.
-- A later version or package release is found and installed by a normal `sudo pacman -Syu` operation.
+- A real Pacman upgrade from the older synthetic package to the new package passes separately from the production-repository checks.
 - Package removal restores the intended user associations without deleting installed third-party apps.
 - Repository removal affects only the SmartTar-managed configuration, not unrelated Pacman settings.
 - Existing archive and AppImage installation tests still pass.
 
 Keep the repository's testing status honest. Automated installation in an isolated Arch environment is not the same as successful migration on the CachyOS laptop or graphical validation in KDE Plasma and DEsk.
+
+The workflow checks actual public HTTPS downloads after publishing, including the package, repository database, manifest, and their signatures. `tools/test_live_repository.sh` then uses the real bootstrap helper in a disposable Arch container, installs from that public repository, and verifies normal-user migration and preservation of existing apps and preferences.
+
+For the first production release, the subsequent `pacman -Syu` check is deliberately a no-op for SmartTar because the clean installation is already current. It is not evidence of a production-version upgrade. The actual older-version transition is tested separately using a synthetic `0.3.0` package and the `0.4.0` package with a disposable signing key. A future production release is needed to verify a real production-to-production upgrade.
 
 ## If publication fails
 
@@ -96,6 +106,6 @@ If the signing key might be exposed, stop publishing with it and handle key revo
 
 ## Release evidence
 
-Record the source revision, application version, package version and release, public signing fingerprint, package hash, workflow result, and published install or upgrade checks. Keep private keys and credentials out of that evidence.
+Record the source revision, application version, package version and release, public signing fingerprint, package hash, workflow result, and published install or upgrade checks. The **smarttar-release-verification** artifact contains the validated release, build, signed-upgrade test, publication, live-signature, and live-system-test records. Keep private keys and credentials out of that evidence.
 
 The existing v0.3.0 screenshots show actual application dialogs. They do not demonstrate Pacman trust setup, repository publication, or an operating-system upgrade, and should not be used as evidence for those checks.
