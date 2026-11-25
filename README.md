@@ -2,11 +2,11 @@
 
 **Install downloaded Linux apps with a few clicks.**
 
-Version 0.2.0 · Testing · CachyOS and Arch Linux · KDE Plasma and DEsk
+Version 0.3.0 · Testing · CachyOS and Arch Linux · KDE Plasma and DEsk
 
-I built SmartTar for people who want to install a downloaded program without working out terminal commands. After the one-time setup, double-click a `.tar.gz` or `.tgz` download, choose an available install option, and confirm. The installed app appears in your application menu.
+I built SmartTar for people who want to install a downloaded program without working out terminal commands. After the one-time setup, open a `.tar.gz`, `.tgz`, or `.AppImage` download with SmartTar, choose the install option, and confirm. The installed app appears in your application menu.
 
-For example, if a Linux app's website gives you a `.tar.gz` download and you do not know what to do with it, SmartTar checks whether the app can be installed from that download. If it can, you confirm the installation in a window. If it cannot, SmartTar offers to unpack the files or explain the next steps.
+For example, if a Linux app's website gives you an unfamiliar download and you do not know what to do with it, SmartTar checks whether it recognizes a supported app. For a supported archive, it unpacks the program. For an AppImage, it saves a copy in a permanent location and makes a menu shortcut. You confirm before either installation begins.
 
 **Download it. Open it. Install it.** No terminal commands are needed for ordinary use with supported app downloads.
 
@@ -16,25 +16,34 @@ For example, if a Linux app's website gives you a `.tar.gz` download and you do 
 
 A `.tar.gz` file is a bundle of files packed together to make the download smaller, similar to a ZIP. Some contain programs that are ready to use. Others contain documents, installer scripts, or source code, the files a developer uses to build a program. The word **archive** in SmartTar means this downloaded bundle.
 
+A `.AppImage` file is a Linux app packaged as one file. SmartTar handles the usual setup for you, so you do not need to change its permissions yourself or remember where you left it in Downloads.
+
 SmartTar looks inside the download and offers the options that fit:
 
 - **Install an app:** Save a supported program on your computer for your own use and add a shortcut to your application menu.
-- **Unpack files:** Put the contents into a new folder.
+- **Unpack an archive:** Put the contents of a `.tar.gz` or `.tgz` file into a new folder.
 - **Get guidance:** Show what to do when the download needs a different installation method.
 
-It asks before making changes. Opening a download does not automatically run its programs or scripts.
+It asks before making changes. Opening a download **with SmartTar** does not run its programs or scripts. SmartTar does not check whether a publisher is trustworthy, so only install downloads from sources you trust.
 
 ## Everyday use
 
 ### 1. Open your download
 
-Download a Linux app from a website you trust, then double-click its `.tar.gz` or `.tgz` file in Dolphin, the file manager.
+Download a Linux app from a website you trust.
+
+- **`.tar.gz` or `.tgz`:** Double-click the file in Dolphin, the file manager.
+- **`.AppImage`:** Right-click the file, choose **Open With**, and select **SmartTar**. You can also double-click when your desktop has SmartTar set as the handler.
+
+Some desktops run an executable AppImage directly when you double-click it. Use **Open With SmartTar** when you want to install it instead. Both `.AppImage` and `.appimage` filenames are accepted.
 
 ### 2. Choose Install
 
-If the archive contains a supported ready-to-run program, choose **Install portable application** or the named install option. Here, portable means the app can run from its own folder.
+For an AppImage, choose **Install AppImage**. SmartTar saves a copy in its own application folder, allows that copy to run, and creates a menu shortcut. The original download is left unchanged. You can remove the original from Downloads after confirming that the installed copy opens correctly.
 
-If installation is not offered, choose **Extract to a new folder** or **Installation guidance**.
+For an archive containing a supported ready-to-run program, choose **Install portable application** or the named install option. Here, portable means the app can run from its own folder.
+
+If an archive has no install option, choose **Extract to a new folder** or **Installation guidance**. AppImages are installed as a single file, not unpacked by SmartTar.
 
 ### 3. Confirm and open the app
 
@@ -42,9 +51,11 @@ Review the destination, the folder where the program will be saved, and confirm.
 
 If SmartTar lists several programs and you are unsure which one to choose, cancel and check the publisher's instructions.
 
-Large downloads can take time to check before the first window appears. This version does not yet show a progress bar.
+Large archives can take time to check before the first window appears. AppImage inspection only reads a small file header, so it does not scan or unpack the whole app before showing its options. Copying a large AppImage can still take time. This version does not yet show a progress bar.
 
 ## Screenshots
+
+These screenshots show the archive-installation flow in v0.2.0. The AppImage option added in v0.3.0 uses the same native dialog style but is not pictured here.
 
 ### Choose what to do
 
@@ -91,13 +102,37 @@ These are real SmartTar dialogs captured in an automated Ubuntu test session wit
 
 6. Close the terminal and double-click `examples/smarttar-smoke-test.tar.gz` in the extracted project folder. SmartTar should open and offer to unpack its text file.
 
-An update can be installed over an earlier version. If setup reports a warning or opening an archive still starts Ark, see [troubleshooting](docs/TECHNICAL.md#diagnostics-and-command-line-extraction).
+If setup reports a warning or opening an archive still starts Ark, see [troubleshooting](docs/TECHNICAL.md#diagnostics-and-command-line-extraction).
+
+### Updating an earlier installation
+
+Download and extract the latest SmartTar ZIP, open a terminal in that new folder, and run `bash install.sh` again without `sudo`. This updates SmartTar and adds its AppImage file associations. Your already installed apps are kept.
+
+Close and reopen Dolphin afterward. To check the installed version, run:
+
+```bash
+python3 ~/.local/share/smarttar/smarttar.py --version
+```
+
+It should report `0.3.0`.
+
+### Try it with an AppImage
+
+1. Download an AppImage for your computer from the app's official website.
+2. Right-click it in Dolphin and select **Open With SmartTar**.
+3. Choose **Install AppImage**, review the destination, and confirm.
+4. Open your application menu and launch the new entry.
+5. Confirm that the original file is still in Downloads and the menu entry opens the installed copy.
+
+After the one-time setup, these steps do not require a terminal. If SmartTar reports the wrong processor type, download the version that matches your computer. If installation succeeds but the app does not open, check the publisher's Linux requirements and [AppImage troubleshooting](docs/TECHNICAL.md#appimage-troubleshooting).
 
 ## What if there is no Install button?
 
 Not every compressed download contains a ready-to-run app. Some need to be built from source or installed through another tool. SmartTar can unpack those files and offer guidance, but it does not silently run unfamiliar installers.
 
 It also does not automatically download missing libraries or make a Windows program run on Linux. The publisher's requirements still apply.
+
+SmartTar recognizes standard AppImages with a supported file header. A renamed file, an invalid header, or an older AppImage without that header is not accepted just because its name ends in `.AppImage`.
 
 ## Is it lightweight?
 
@@ -114,11 +149,13 @@ The automated tests on GitHub run on GitHub's computers, not on yours. They are 
 
 SmartTar does check each archive before installation and while unpacking it. This helps catch damaged files, unsafe paths, and accidental overwrites. These checks add some processing time for large downloads, but there is no background scanning.
 
+AppImages take a shorter route. SmartTar checks the file header and processor type, then copies the file once when you confirm. It calculates a file fingerprint during that same copy, without a separate full-file scan. It does not run the AppImage to inspect it or extract an icon. The menu entry uses a generic application icon.
+
 See the [measurements and technical details](docs/TECHNICAL.md#performance-measurements) if you want the numbers.
 
 ## Current status
 
-This is a testing release, so you may still run into problems. Automated Linux tests have passed, but more testing on real CachyOS, KDE Plasma, and DEsk setups is needed. SmartTar can install programs it recognizes as ready to use, not every possible `.tar.gz` file.
+This is a testing release, so you may still run into problems. Automated checks do not replace testing on real CachyOS, KDE Plasma, and DEsk setups. SmartTar can install programs it recognizes as ready to use, not every possible archive or AppImage. A successful installation does not guarantee that the app has all the system libraries it needs to run.
 
 The detailed compatibility list, size limits, diagnostics, benchmark results, and removal instructions are in [the technical guide](docs/TECHNICAL.md).
 

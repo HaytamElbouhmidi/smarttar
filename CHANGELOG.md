@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+Status: Testing. AppImage installation and menu launching still need verification on the laptop.
+
+- Added installation of `.AppImage` files, including lowercase `.appimage` filenames, alongside `.tar.gz` and `.tgz` archives.
+- Added a flow that copies supported AppImages into a permanent user-owned folder, makes only the installed copy executable, and adds an application-menu shortcut without running the download.
+- Added lightweight AppImage header and native-processor checks, bounded copying, source-change checks, and rollback on installation failure.
+- Added AppImage-specific file associations while preserving earlier archive preferences and later user choices.
+- Added AppImage regression tests and plain-language setup, update, and troubleshooting guidance. No background service or additional Python dependencies.
+
 ## 0.2.0
 
 Status: Testing. Native CachyOS/KDE Plasma/DEsk and real application archives still need laptop verification.

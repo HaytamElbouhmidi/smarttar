@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""SmartTar v0.2.0 real KDialog screenshot capture by Haytam Elbouhmidi.
+"""SmartTar v0.3.0 real KDialog screenshot capture by Haytam Elbouhmidi.
 
 I capture actual SmartTar windows in a private Xvfb/Openbox test session.
-The example archive is synthetic and no application from it is executed.
+The archive and AppImage header fixtures are synthetic and never executed.
 Dialog responses are supplied by this helper after each real window is captured.
 These images are not native CachyOS, KDE Plasma, or DEsk compatibility tests.
 """
@@ -29,20 +29,25 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 REPOSITORY = Path(__file__).resolve().parents[1]
 SCREENSHOTS = (
     ("--menu", "01-main-menu.png", "install\n", "Choose what to do with a downloaded archive."),
     ("--yesno", "02-install-confirmation.png", "", "Review the application and destination before installing."),
     ("--msgbox", "03-install-complete.png", "", "The example application has been copied into the private test directory."),
+    ("--menu", "04-appimage-menu.png", "install\n", "Choose to install the synthetic AppImage header fixture."),
+    ("--yesno", "05-appimage-confirmation.png", "", "Review the AppImage copy and application-menu shortcut before installing."),
+    ("--msgbox", "06-appimage-complete.png", "", "The synthetic AppImage header fixture has been copied without running it."),
 )
 REQUIRED_TOOLS = (
     "kdialog", "Xvfb", "xvfb-run", "xauth", "openbox", "import", "identify", "xdotool", "dbus-run-session",
 )
 PROVENANCE = (
     "Actual SmartTar KDialog windows captured in an automated Linux Xvfb/Openbox session "
-    "using a harmless example archive. Responses were supplied by the capture helper. "
-    "No application from the archive was run. Appearance may differ on CachyOS, KDE Plasma, or DEsk."
+    "using a harmless example archive and a synthetic AppImage header fixture. "
+    "Responses were supplied by the capture helper. Neither fixture was executed. "
+    "The AppImage fixture is not a complete publisher AppImage or a runtime compatibility test. "
+    "Appearance may differ on CachyOS, KDE Plasma, or DEsk."
 )
 
 
@@ -130,7 +135,7 @@ def make_example(archive: Path) -> None:
         raise CaptureError("The trusted /usr/bin/true fixture is not a Linux ELF executable.")
     files = (
         ("Example-App/example-app", payload, 0o755),
-        ("Example-App/README.txt", b"SmartTar v0.2.0 screenshot fixture. This example is not run.\n", 0o644),
+        ("Example-App/README.txt", b"SmartTar v0.3.0 screenshot fixture. This example is not run.\n", 0o644),
     )
     with tarfile.open(archive, "w:gz") as stream:
         for name, contents, mode in files:
@@ -138,6 +143,15 @@ def make_example(archive: Path) -> None:
             member.size = len(contents)
             member.mode = mode
             stream.addfile(member, io.BytesIO(contents))
+
+
+def make_appimage_example(image: Path) -> None:
+    payload = bytearray(Path("/usr/bin/true").read_bytes())
+    if len(payload) <= 64 or payload[:4] != b"\x7fELF":
+        raise CaptureError("The trusted /usr/bin/true fixture is not a Linux ELF executable.")
+    payload[8:11] = b"AI\x02"
+    image.write_bytes(payload)
+    image.chmod(0o644)
 
 
 def capture_session(session: Path, output: Path) -> None:
@@ -151,12 +165,17 @@ def capture_session(session: Path, output: Path) -> None:
     output.mkdir()
     archive = session / "Example-App.tar.gz"
     make_example(archive)
+    appimage = session / "Example-AppImage.AppImage"
+    make_appimage_example(appimage)
+    appimage_digest = hashlib.sha256(appimage.read_bytes()).hexdigest()
     records = []
     title = f"SmartTar v{smarttar.VERSION}"
     install_root = session / "Applications"
     launcher_root = session / "Desktop-Entries"
 
     def capture_dialog(*args: str) -> subprocess.CompletedProcess[str]:
+        if manager.poll() is not None:
+            raise CaptureError("The isolated Openbox window manager exited before capture.")
         index = len(records)
         if index >= len(SCREENSHOTS):
             raise CaptureError("SmartTar displayed an unexpected additional dialog.")
@@ -176,6 +195,7 @@ def capture_session(session: Path, output: Path) -> None:
                 records.append({
                     "file": filename,
                     "caption": caption,
+                    "fixture": "Synthetic archive" if index < 3 else "Synthetic AppImage header fixture",
                     "width": width,
                     "height": height,
                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -191,12 +211,24 @@ def capture_session(session: Path, output: Path) -> None:
                     patch.object(smarttar, "app_root", return_value=install_root), \
                     patch.object(smarttar, "application_dir", return_value=launcher_root):
                 smarttar.run_gui(archive)
+                smarttar.run_gui(appimage)
             if len(records) != len(SCREENSHOTS):
-                raise CaptureError("The full three-dialog workflow did not finish.")
+                raise CaptureError("Both three-dialog installation workflows must finish.")
             if not (install_root / "example-app/payload/Example-App/example-app").is_file():
                 raise CaptureError("The example installation did not complete in the private directory.")
             if not (launcher_root / "smarttar-example-app.desktop").is_file():
                 raise CaptureError("The example application launcher was not created.")
+            installed_appimage = install_root / "example-appimage/payload" / appimage.name
+            if not installed_appimage.is_file() or hashlib.sha256(installed_appimage.read_bytes()).hexdigest() != appimage_digest:
+                raise CaptureError("The synthetic AppImage header fixture was not copied correctly.")
+            if installed_appimage.stat().st_mode & 0o777 != 0o755:
+                raise CaptureError("The installed AppImage copy does not have executable permissions.")
+            if not (launcher_root / "smarttar-example-appimage.desktop").is_file():
+                raise CaptureError("The synthetic AppImage header fixture launcher was not created.")
+            if hashlib.sha256(appimage.read_bytes()).hexdigest() != appimage_digest or appimage.stat().st_mode & 0o777 != 0o644:
+                raise CaptureError("The synthetic AppImage header fixture source changed during installation.")
+            if manager.poll() is not None:
+                raise CaptureError("The isolated Openbox window manager exited before completion.")
         finally:
             stop_process(manager)
 
@@ -209,6 +241,10 @@ def capture_session(session: Path, output: Path) -> None:
         "display": "Dedicated Xvfb with Openbox and Qt Fusion style",
         "provenance": PROVENANCE,
         "fixture": "Synthetic Example-App.tar.gz containing a copy of /usr/bin/true, never executed",
+        "appimage_fixture": (
+            "Synthetic AppImage header fixture made from a copy of /usr/bin/true with an AI type 2 marker, "
+            "never executed. Not a complete publisher AppImage or a runtime compatibility test."
+        ),
         "responses": "Supplied by the helper after each actual window was captured",
         "native_cachyos_kde_desk_validation": False,
         "screenshots": records,
@@ -275,7 +311,7 @@ def capture(output: Path) -> None:
                 path.unlink(missing_ok=True)
             output.rmdir()
             raise
-    print(f"Captured three real SmartTar dialogs in {output}")
+    print(f"Captured six real SmartTar dialogs in {output}")
     print(PROVENANCE)
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SmartTar v0.2.0, a local .tar.gz inspector and KDE installer."""
+"""SmartTar v0.3.0, a local archive and AppImage installer for KDE."""
 
 # Copyright (c) 2026 Haytam Elbouhmidi
 # SPDX-License-Identifier: MIT
@@ -26,13 +26,20 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 DESKTOP_ID = "smarttar-handler.desktop"
 MIME_TYPE = "application/x-compressed-tar"
+APPIMAGE_MIME_TYPES = (
+    "application/vnd.appimage",
+    "application/x-iso9660-appimage",
+    "application/x-appimage",
+)
+MIME_TYPES = (MIME_TYPE, *APPIMAGE_MIME_TYPES)
 MAX_ARCHIVE_BYTES = 8 * 1024 * 1024 * 1024
 MAX_EXPANDED_BYTES = 16 * 1024 * 1024 * 1024
 MAX_ENTRIES = 100_000
 MAX_FILE_BYTES = 8 * 1024 * 1024 * 1024
+MAX_APPIMAGE_BYTES = MAX_FILE_BYTES
 MAX_METADATA_BYTES = 1024 * 1024
 MAX_TOTAL_METADATA_BYTES = 16 * 1024 * 1024
 MAX_TAR_OVERHEAD_BYTES = 384 * 1024 * 1024
@@ -71,6 +78,26 @@ class Inspection:
             "expanded_bytes": self.expanded_size,
             "portable_candidates": list(self.binaries),
             "archive_sha256": self.archive_sha256,
+        }
+
+
+@dataclass(frozen=True)
+class AppImageInspection:
+    image: Path
+    appimage_type: int
+    architecture: str
+    size: int
+    fingerprint: tuple[int, ...]
+    header: bytes
+
+    def as_dict(self) -> dict:
+        return {
+            "version": VERSION,
+            "image": str(self.image),
+            "kind": "appimage",
+            "appimage_type": self.appimage_type,
+            "architecture": self.architecture,
+            "size_bytes": self.size,
         }
 
 
@@ -487,13 +514,16 @@ def android_studio_launchers(entries: list[Entry], binaries: list[str], products
     return True, unique if len(unique) == 1 else ()
 
 
-def ensure_disk_space(info: Inspection, destination: Path) -> None:
+def ensure_disk_space(info: Inspection | AppImageInspection, destination: Path) -> None:
     parent = destination.parent
     while not parent.exists():
         if parent == parent.parent:
             raise SmartTarError("Cannot find the destination filesystem.")
         parent = parent.parent
-    required = info.expanded_size + len(info.entries) * 4096 + 64 * 1024 * 1024
+    required = (
+        info.size if isinstance(info, AppImageInspection)
+        else info.expanded_size + len(info.entries) * 4096
+    ) + 64 * 1024 * 1024
     free = shutil.disk_usage(parent).free
     if free < required:
         raise SmartTarError(
@@ -567,15 +597,160 @@ def unpack_checked(info: Inspection, destination: Path) -> None:
         raise
 
 
+def _file_fingerprint(details: os.stat_result) -> tuple[int, ...]:
+    return (details.st_dev, details.st_ino, details.st_size, details.st_mtime_ns, details.st_ctime_ns)
+
+
+@contextmanager
+def _open_appimage(path: Path):
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise SmartTarError(f"Cannot open AppImage. Select the downloaded file, not a shortcut: {exc}") from exc
+    with os.fdopen(descriptor, "rb", buffering=0) as source:
+        details = os.fstat(source.fileno())
+        if not stat.S_ISREG(details.st_mode):
+            raise SmartTarError("The AppImage must be a regular file, not a folder or device.")
+        if details.st_size > MAX_APPIMAGE_BYTES:
+            raise SmartTarError("AppImage exceeds the 8 GiB file size limit.")
+        yield source, details
+
+
+def _appimage_header(header: bytes) -> tuple[int, str]:
+    if (
+        len(header) < 52 or header[:4] != b"\x7fELF"
+        or header[4] not in (1, 2) or header[5] not in (1, 2) or header[6] != 1
+    ):
+        raise SmartTarError("This download does not have a valid Linux AppImage header.")
+    if header[8:11] not in (b"AI\x01", b"AI\x02"):
+        raise SmartTarError("AppImage format not recognized. SmartTar supports marked type 1 and type 2 AppImages.")
+    expected_size = 52 if header[4] == 1 else 64
+    if len(header) < expected_size:
+        raise SmartTarError("The AppImage header is incomplete. Download the file again.")
+    byte_order = "<" if header[5] == 1 else ">"
+    elf_type, machine, version = struct.unpack_from(byte_order + "HHI", header, 16)
+    header_size = struct.unpack_from(byte_order + "H", header, 40 if header[4] == 1 else 52)[0]
+    if elf_type not in (2, 3) or version != 1 or header_size != expected_size:
+        raise SmartTarError("This download does not have a valid Linux AppImage header.")
+    architectures = {
+        (3, 1): "i686", (62, 2): "x86_64", (40, 1): "armv7l",
+        (183, 2): "aarch64", (243, 2): "riscv64",
+    }
+    architecture = architectures.get((machine, header[4]))
+    if architecture is None or header[5] != 1:
+        raise SmartTarError("This AppImage processor type is not supported by SmartTar.")
+    return header[10], architecture
+
+
+def _check_appimage_architecture(architecture: str) -> None:
+    host = platform.machine().lower()
+    aliases = {"amd64": "x86_64", "x64": "x86_64", "arm64": "aarch64", "i386": "i686", "i486": "i686", "i586": "i686"}
+    host = aliases.get(host, host)
+    if architecture != host:
+        raise SmartTarError(
+            f"This AppImage is for {architecture}, but this computer is {host}. "
+            "Download the version for this computer. Cross-architecture and 32-bit compatibility are not enabled by SmartTar."
+        )
+
+
+def inspect_appimage(image: Path) -> AppImageInspection:
+    image = image.expanduser().absolute()
+    if image.suffix.lower() != ".appimage":
+        raise SmartTarError("Select a .AppImage file.")
+    desktop_string(str(image))
+    slug_from_archive(image)
+    with _open_appimage(image) as (source, details):
+        header = source.read(64)
+        appimage_type, architecture = _appimage_header(header)
+        if details.st_size <= (52 if header[4] == 1 else 64):
+            raise SmartTarError("The AppImage is incomplete. Download the file again.")
+        fingerprint = _file_fingerprint(details)
+        if _file_fingerprint(os.fstat(source.fileno())) != fingerprint:
+            raise SmartTarError("AppImage changed during inspection. Please open it again.")
+    _check_appimage_architecture(architecture)
+    return AppImageInspection(image, appimage_type, architecture, details.st_size, fingerprint, header)
+
+
+def install_appimage(info: AppImageInspection, root: Path | None = None, desktop_dir: Path | None = None) -> Path:
+    _check_appimage_architecture(info.architecture)
+    root = (root or app_root()).expanduser().absolute()
+    desktop_dir = (desktop_dir or application_dir()).expanduser().absolute()
+    slug = slug_from_archive(info.image)
+    target = root / slug
+    launcher = desktop_dir / f"smarttar-{slug}.desktop"
+    if target.exists() or target.is_symlink() or launcher.exists() or launcher.is_symlink():
+        raise SmartTarError(f"'{slug}' is already installed. Existing files will not be overwritten.")
+    final_executable = target / "payload" / info.image.name
+    exec_line = desktop_quote(str(final_executable))
+    name = info.image.stem
+    desktop_string(name)
+    ensure_disk_space(info, target)
+    root.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".smarttar-", dir=root))
+    created = False
+    try:
+        payload = staging / "payload"
+        payload.mkdir(mode=0o700)
+        executable = payload / info.image.name
+        digest = hashlib.sha256()
+        with _open_appimage(info.image) as (source, details):
+            if _file_fingerprint(details) != info.fingerprint:
+                raise SmartTarError("AppImage changed since inspection. Please open it again.")
+            copied = 0
+            copied_header = bytearray()
+            with executable.open("xb") as output:
+                while chunk := source.read(min(COPY_CHUNK_BYTES, info.size - copied + 1)):
+                    if len(copied_header) < len(info.header):
+                        copied_header.extend(chunk[:len(info.header) - len(copied_header)])
+                        if not info.header.startswith(copied_header):
+                            raise SmartTarError("AppImage header changed since inspection. Please open it again.")
+                    copied += len(chunk)
+                    if copied > info.size:
+                        raise SmartTarError("AppImage changed during installation. Please open it again.")
+                    output.write(chunk)
+                    digest.update(chunk)
+            if copied != info.size or _file_fingerprint(os.fstat(source.fileno())) != info.fingerprint:
+                raise SmartTarError("AppImage changed during installation. Please open it again.")
+            if _file_fingerprint(info.image.stat(follow_symlinks=False)) != info.fingerprint:
+                raise SmartTarError("AppImage was replaced during installation. Please open it again.")
+        executable.chmod(0o755)
+        (staging / "smarttar.json").write_text(
+            json.dumps({
+                "smarttar_version": VERSION,
+                "kind": "appimage",
+                "source": info.image.name,
+                "entry": info.image.name,
+                "appimage_type": info.appimage_type,
+                "architecture": info.architecture,
+                "size_bytes": info.size,
+                "sha256": digest.hexdigest(),
+            }, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        target.mkdir(mode=0o700)
+        created = True
+        payload.rename(target / "payload")
+        (staging / "smarttar.json").rename(target / "smarttar.json")
+        write_desktop_file(launcher, name, exec_line, working_directory=final_executable.parent)
+        return target
+    except BaseException:
+        if created:
+            shutil.rmtree(target)
+        raise
+    finally:
+        shutil.rmtree(staging)
+
+
 def slug_from_archive(archive: Path) -> str:
     name = archive.name
-    for suffix in (".pkg.tar.gz", ".tar.gz", ".tgz"):
+    for suffix in (".pkg.tar.gz", ".tar.gz", ".tgz", ".appimage"):
         if name.lower().endswith(suffix):
             name = name[: -len(suffix)]
             break
     slug = re.sub(r"[^a-z0-9.-]+", "-", name.lower()).strip(".-")[:64]
     if not slug or slug in {".", ".."}:
-        raise SmartTarError("Archive filename cannot be used as an application name.")
+        raise SmartTarError("Download filename cannot be used as an application name.")
     return slug
 
 
@@ -599,14 +774,14 @@ def write_desktop_file(path: Path, name: str, exec_line: str, hidden: bool = Fal
         "[Desktop Entry]",
         "Type=Application",
         f"Name={desktop_string(name)}",
-        "Comment=Install or inspect a downloaded archive" if hidden else "Comment=Portable application installed by SmartTar",
+        "Comment=Install downloaded archives and AppImages" if hidden else "Comment=Portable application installed by SmartTar",
         f"Exec={exec_line}",
         "Icon=package-x-generic" if hidden else "Icon=application-x-executable",
         "Terminal=false",
         "Categories=Utility;",
     ]
     if hidden:
-        lines.extend((f"MimeType={MIME_TYPE};", "NoDisplay=true", "TryExec=python3"))
+        lines.extend((f"MimeType={';'.join(MIME_TYPES)};", "NoDisplay=true", "TryExec=python3"))
     if working_directory is not None:
         lines.append(f"Path={desktop_string(str(working_directory))}")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -686,7 +861,7 @@ def valid_association_name(filename: str) -> bool:
     return filename == "mimeapps.list" or bool(re.fullmatch(r"[a-z0-9_-]{1,40}-mimeapps\.list", filename))
 
 
-def default_line(path: Path) -> str | None:
+def default_line(path: Path, mime_type: str = MIME_TYPE) -> str | None:
     if not path.exists():
         return None
     section = False
@@ -695,12 +870,12 @@ def default_line(path: Path) -> str | None:
         if stripped.startswith("[") and stripped.endswith("]"):
             section = stripped == "[Default Applications]"
             continue
-        if section and line.partition("=")[0].strip() == MIME_TYPE and "=" in line:
+        if section and line.partition("=")[0].strip() == mime_type and "=" in line:
             return line
     return None
 
 
-def write_default_line(path: Path, replacement: str | None) -> None:
+def write_default_line(path: Path, replacement: str | None, mime_type: str = MIME_TYPE) -> None:
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True) if path.exists() else []
     section = False
     section_start = None
@@ -716,7 +891,7 @@ def write_default_line(path: Path, replacement: str | None) -> None:
                 section_start = index
                 insert_at = len(lines)
             continue
-        if section and line.partition("=")[0].strip() == MIME_TYPE and "=" in line:
+        if section and line.partition("=")[0].strip() == mime_type and "=" in line:
             existing_at = index
             break
 
@@ -771,21 +946,27 @@ def configure_association(script_path: Path) -> bool:
     if settings.exists():
         saved = json.loads(settings.read_text(encoding="utf-8"))
     else:
-        old = run_command("xdg-mime", "query", "default", MIME_TYPE)
-        saved = {"previous_default": old.stdout.strip() if old.returncode == 0 else ""}
-    saved.setdefault("overrides", {})
-    for filename in association_names():
-        if filename not in saved["overrides"]:
-            file_path = config_home() / filename
-            original_line = default_line(file_path)
-            if filename == "mimeapps.list" and original_line is not None:
-                if original_line.partition("=")[2].strip().split(";")[0] == DESKTOP_ID and "previous_default" in saved:
-                    previous = saved["previous_default"]
-                    original_line = f"{MIME_TYPE}={previous};\n" if previous else None
-            saved["overrides"][filename] = {
-                "previous_line": original_line,
-                "file_existed": file_path.exists(),
-            }
+        saved = {}
+    saved.setdefault("appimage", {})
+    records = [(MIME_TYPE, saved)]
+    records.extend((mime_type, saved["appimage"].setdefault(mime_type, {})) for mime_type in APPIMAGE_MIME_TYPES)
+    for mime_type, record in records:
+        if "previous_default" not in record:
+            old = run_command("xdg-mime", "query", "default", mime_type)
+            record["previous_default"] = old.stdout.strip() if old.returncode == 0 else ""
+        record.setdefault("overrides", {})
+        for filename in association_names():
+            if filename not in record["overrides"]:
+                file_path = config_home() / filename
+                original_line = default_line(file_path, mime_type)
+                if filename == "mimeapps.list" and original_line is not None:
+                    if original_line.partition("=")[2].strip().split(";")[0] == DESKTOP_ID:
+                        previous = record["previous_default"]
+                        original_line = f"{mime_type}={previous};\n" if previous and previous != DESKTOP_ID else None
+                record["overrides"][filename] = {
+                    "previous_line": original_line,
+                    "file_existed": file_path.exists(),
+                }
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
     if app_file.exists():
@@ -796,14 +977,20 @@ def configure_association(script_path: Path) -> bool:
         f"python3 {desktop_quote(str(script_path))} %f",
         hidden=True,
     )
-    for filename in saved["overrides"]:
-        if not valid_association_name(filename):
-            continue
-        write_default_line(config_home() / filename, f"{MIME_TYPE}={DESKTOP_ID};\n")
+    for mime_type, record in records:
+        for filename in record["overrides"]:
+            if not valid_association_name(filename):
+                continue
+            write_default_line(config_home() / filename, f"{mime_type}={DESKTOP_ID};\n", mime_type)
     for warning in refresh_kde_cache():
         print(f"Warning: {warning}", file=sys.stderr)
-    current = run_command("xdg-mime", "query", "default", MIME_TYPE)
-    return current.returncode == 0 and current.stdout.strip() == DESKTOP_ID
+    recognized = True
+    for mime_type in MIME_TYPES:
+        current = run_command("xdg-mime", "query", "default", mime_type)
+        if current.returncode != 0 or current.stdout.strip() != DESKTOP_ID:
+            print(f"Warning: Default handler not confirmed for {mime_type}.", file=sys.stderr)
+            recognized = False
+    return recognized
 
 
 def restore_association() -> None:
@@ -811,31 +998,38 @@ def restore_association() -> None:
     app_file = application_dir() / DESKTOP_ID
     if settings.exists():
         saved = json.loads(settings.read_text(encoding="utf-8"))
-        if "overrides" in saved:
-            for filename, record in saved["overrides"].items():
-                if not valid_association_name(filename):
-                    continue
-                path = config_home() / filename
-                current_line = default_line(path)
-                if current_line is None:
-                    continue
-                current_ids = [item for item in current_line.partition("=")[2].strip().split(";") if item]
-                if DESKTOP_ID not in current_ids:
-                    continue
-                if current_ids == [DESKTOP_ID]:
-                    write_default_line(path, record.get("previous_line"))
-                else:
-                    remaining = [item for item in current_ids if item != DESKTOP_ID]
-                    write_default_line(path, f"{MIME_TYPE}={';'.join(remaining)};\n")
-                if not record.get("file_existed") and path.read_text(encoding="utf-8").strip() in ("", "[Default Applications]"):
-                    path.unlink()
-        else:
-            current = run_command("xdg-mime", "query", "default", MIME_TYPE)
-            previous = saved.get("previous_default", "")
-            if current.stdout.strip() == DESKTOP_ID and previous and previous != DESKTOP_ID:
-                result = run_command("xdg-mime", "default", previous, MIME_TYPE)
-                if result.returncode != 0:
-                    raise SmartTarError(f"Could not restore the previous handler: {previous}")
+        records = [(MIME_TYPE, saved)]
+        records.extend((mime_type, saved.get("appimage", {})[mime_type]) for mime_type in APPIMAGE_MIME_TYPES if mime_type in saved.get("appimage", {}))
+        created_files = set()
+        for mime_type, association in records:
+            if "overrides" in association:
+                for filename, record in association["overrides"].items():
+                    if not valid_association_name(filename):
+                        continue
+                    path = config_home() / filename
+                    if not record.get("file_existed"):
+                        created_files.add(path)
+                    current_line = default_line(path, mime_type)
+                    if current_line is None:
+                        continue
+                    current_ids = [item for item in current_line.partition("=")[2].strip().split(";") if item]
+                    if DESKTOP_ID not in current_ids:
+                        continue
+                    if current_ids == [DESKTOP_ID]:
+                        write_default_line(path, record.get("previous_line"), mime_type)
+                    else:
+                        remaining = [item for item in current_ids if item != DESKTOP_ID]
+                        write_default_line(path, f"{mime_type}={';'.join(remaining)};\n", mime_type)
+            else:
+                current = run_command("xdg-mime", "query", "default", mime_type)
+                previous = association.get("previous_default", "")
+                if current.stdout.strip() == DESKTOP_ID and previous and previous != DESKTOP_ID:
+                    result = run_command("xdg-mime", "default", previous, mime_type)
+                    if result.returncode != 0:
+                        raise SmartTarError(f"Could not restore the previous handler: {previous}")
+        for path in created_files:
+            if path.exists() and path.read_text(encoding="utf-8").strip() in ("", "[Default Applications]"):
+                path.unlink()
     if app_file.exists():
         app_file.unlink()
     if settings.exists():
@@ -894,7 +1088,47 @@ def show_contents(info: Inspection) -> None:
         temp.unlink(missing_ok=True)
 
 
+def run_appimage_gui(image: Path) -> None:
+    info = inspect_appimage(image)
+    while True:
+        selection = choose(
+            f"{info.image.name}\nAppImage application\nProcessor: {info.architecture}\nSize: {info.size / (1024 * 1024):.1f} MiB",
+            [("install", "Install AppImage"), ("guide", "How AppImage installation works"), ("cancel", "Cancel")],
+        )
+        if selection in (None, "cancel"):
+            return
+        if selection == "guide":
+            notify(
+                "An AppImage is a Linux program packaged as one file.\n\n"
+                "SmartTar copies it to your app folder and adds an application-menu shortcut. "
+                "The original download stays unchanged. The app does not run until you open its shortcut.\n\n"
+                "Only install downloads from a publisher you trust. Format checks are not a virus scan. "
+                "Some apps still need system libraries or FUSE support."
+            )
+        elif selection == "install":
+            target = app_root() / slug_from_archive(info.image)
+            confirm = dialog(
+                "--yesno",
+                f"Install: {info.image.name}\nDestination: {target}\n\n"
+                "SmartTar will copy this AppImage, make the copy executable, and add an application-menu shortcut. "
+                "Your original download stays unchanged.\n\n"
+                "Only install software from a source you trust. This application can access your files when you launch it. "
+                "It will not start during installation.",
+            )
+            if confirm.returncode == 0:
+                installed = install_appimage(info)
+                notify(
+                    f"Installed successfully to:\n{installed}\n\n"
+                    f"Open {info.image.stem} from the application menu to start it.\n"
+                    "Your original AppImage download has not been changed."
+                )
+                return
+
+
 def run_gui(archive: Path) -> None:
+    if archive.suffix.lower() == ".appimage":
+        run_appimage_gui(archive)
+        return
     info = inspect_archive(archive)
     while True:
         options = []
@@ -976,7 +1210,7 @@ def doctor() -> int:
                     exec_count += key.strip() == "Exec"
             expected = f"python3 {desktop_quote(str(installed_script))} %f"
             exec_ok = exec_count == 1 and fields.get("Exec") == expected
-            handler_ok = fields.get("Type") == "Application" and MIME_TYPE in fields.get("MimeType", "").split(";")
+            handler_ok = fields.get("Type") == "Application" and all(mime_type in fields.get("MimeType", "").split(";") for mime_type in MIME_TYPES)
         else:
             handler_ok = False
     except (OSError, ValueError, SmartTarError) as exc:
@@ -986,33 +1220,36 @@ def doctor() -> int:
     print("Handler Exec: " + ("valid" if exec_ok else "INVALID"))
     healthy = healthy and handler_ok and exec_ok
 
-    query_ok = False
+    query_ok = bool(available["xdg-mime"])
     if available["xdg-mime"]:
-        try:
-            result = run_command("xdg-mime", "query", "default", MIME_TYPE)
-            current = result.stdout.strip()
-            print(f"Default association: {current!r} (query exit {result.returncode})")
-            query_ok = result.returncode == 0 and current == DESKTOP_ID
-            if result.returncode != 0 and result.stderr.strip():
-                print("Query error: " + repr(result.stderr.strip()))
-        except (OSError, SmartTarError) as exc:
-            print("Default association query failed: " + repr(str(exc)))
+        for mime_type in MIME_TYPES:
+            try:
+                result = run_command("xdg-mime", "query", "default", mime_type)
+                current = result.stdout.strip()
+                print(f"Default association ({mime_type}): {current!r} (query exit {result.returncode})")
+                query_ok = query_ok and result.returncode == 0 and current == DESKTOP_ID
+                if result.returncode != 0 and result.stderr.strip():
+                    print("Query error: " + repr(result.stderr.strip()))
+            except (OSError, SmartTarError) as exc:
+                query_ok = False
+                print(f"Default association query failed ({mime_type}): " + repr(str(exc)))
     else:
         print("Default association: not checked")
     healthy = healthy and query_ok
+    print("AppImage launch compatibility: not verified (depends on the app and its runtime)")
     print("GUI rendering: not verified")
     print("Result: " + ("PASS" if healthy else "FAIL"))
     return 0 if healthy else 1
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=f"SmartTar v{VERSION}, .tar.gz installer for KDE Plasma")
-    parser.add_argument("archive", type=Path, nargs="?", help="A .tar.gz or .tgz archive")
-    parser.add_argument("--inspect", action="store_true", help="Print the archive classification as JSON")
+    parser = argparse.ArgumentParser(description=f"SmartTar v{VERSION}, archive and AppImage installer for KDE Plasma")
+    parser.add_argument("archive", type=Path, nargs="?", help="A .tar.gz, .tgz, or .AppImage download")
+    parser.add_argument("--inspect", action="store_true", help="Print the download classification as JSON without running it")
     parser.add_argument("--extract", type=Path, metavar="PARENT", help="Extract safely into a new folder under PARENT")
-    parser.add_argument("--setup", action="store_true", help="Register SmartTar as the .tar.gz handler")
+    parser.add_argument("--setup", action="store_true", help="Register SmartTar for .tar.gz and .AppImage downloads")
     parser.add_argument("--doctor", action="store_true", help="Check dependencies and desktop configuration without making changes")
-    parser.add_argument("--restore-association", action="store_true", help="Restore the previous .tar.gz handler")
+    parser.add_argument("--restore-association", action="store_true", help="Restore previous archive and AppImage handlers")
     parser.add_argument("--version", action="version", version=VERSION)
     args = parser.parse_args()
     try:
@@ -1021,20 +1258,24 @@ def main() -> int:
         elif args.setup:
             recognized = configure_association(Path(__file__).resolve())
             if recognized:
-                print("SmartTar is now the default handler for .tar.gz archives.")
+                print("SmartTar is now the default handler for supported archives and AppImage MIME types.")
+                print("If your file manager runs an AppImage directly, right-click it and choose Open With SmartTar.")
             else:
                 print("SmartTar association was saved, but activation is not confirmed.")
                 print("Run the installed smarttar.py with --doctor to check the current session.")
                 return 2
         elif args.restore_association:
             restore_association()
-            print("Previous archive association restored.")
+            print("Previous archive and AppImage associations restored.")
         else:
             if args.archive is None:
-                parser.error("an archive path is required")
+                parser.error("an archive or AppImage path is required")
             if args.inspect:
-                print(json.dumps(inspect_archive(args.archive).as_dict(), indent=2))
+                info = inspect_appimage(args.archive) if args.archive.suffix.lower() == ".appimage" else inspect_archive(args.archive)
+                print(json.dumps(info.as_dict(), indent=2))
             elif args.extract is not None:
+                if args.archive.suffix.lower() == ".appimage":
+                    raise SmartTarError("AppImages are installed as one file, not extracted. Open this file with SmartTar to install it.")
                 info = inspect_archive(args.archive)
                 target = args.extract.expanduser().resolve(strict=True) / slug_from_archive(info.archive)
                 unpack_checked(info, target)

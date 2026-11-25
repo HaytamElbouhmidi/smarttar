@@ -1,4 +1,4 @@
-# SmartTar v0.2.0 real KDialog screenshots in an isolated test desktop
+# SmartTar v0.3.0 real KDialog screenshots in an isolated test desktop
 name: SmartTar screenshots
 
 on:
@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/capture_screenshots.py'
       - '.github/workflows/screenshots.yml'
+      - 'smarttar.py'
   workflow_dispatch:
 
 permissions:
@@ -25,7 +26,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends python3 kdialog xvfb openbox imagemagick xdotool dbus-x11 xauth fonts-dejavu-core
       - name: Capture actual SmartTar dialogs
         run: python3 tools/capture_screenshots.py --output artifacts/screenshots
-      - name: Upload three PNG screenshots and capture provenance
+      - name: Upload six PNG screenshots and capture provenance
         uses: actions/upload-artifact@v7
         with:
           name: smarttar-dialog-screenshots

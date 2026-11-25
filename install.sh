@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SmartTar v0.2.0 user-level installation for CachyOS and KDE Plasma
+# SmartTar v0.3.0 user-level installation for CachyOS and KDE Plasma
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,6 +19,7 @@ mkdir -p "$data_dir"
 install -m 755 "$script_dir/smarttar.py" "$data_dir/smarttar.py"
 python3 "$data_dir/smarttar.py" --setup
 
-printf '\nSmartTar v0.2.0 installed for the current user.\n'
-printf 'Double-click a .tar.gz archive in Dolphin to inspect it.\n'
+printf '\nSmartTar v0.3.0 installed for the current user.\n'
+printf 'Open .tar.gz, .tgz, or .AppImage downloads with SmartTar in Dolphin.\n'
+printf 'For AppImages, use right-click > Open With > SmartTar if double-click runs the app directly.\n'
 printf 'Check this session with: python3 "%s/smarttar.py" --doctor\n' "$data_dir"

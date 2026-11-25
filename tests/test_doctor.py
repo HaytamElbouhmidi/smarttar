@@ -1,4 +1,4 @@
-"""SmartTar read-only diagnostic tests v0.2.0."""
+"""SmartTar read-only diagnostic tests v0.3.0."""
 
 from contextlib import redirect_stdout
 import io
@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import smarttar
 
@@ -52,7 +52,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("Result: PASS", output.getvalue())
         self.assertIn("GUI rendering: not verified", output.getvalue())
         self.assertIn("Handler Exec: valid", output.getvalue())
-        command.assert_called_once_with("xdg-mime", "query", "default", smarttar.MIME_TYPE)
+        self.assertEqual(command.call_args_list, [call("xdg-mime", "query", "default", mime_type) for mime_type in smarttar.MIME_TYPES])
         self.assertEqual(self.snapshot(), before)
 
     def test_doctor_fails_missing_dependency_display_and_default(self):
