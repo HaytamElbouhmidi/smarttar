@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=SmartTar
+Comment=Install a downloaded Linux app or unpack an archive
+Exec=/usr/bin/smarttar %f
+Icon=package-x-generic
+Terminal=false
+NoDisplay=true
+Categories=Utility;
+MimeType=application/x-compressed-tar;application/vnd.appimage;application/x-iso9660-appimage;application/x-appimage;

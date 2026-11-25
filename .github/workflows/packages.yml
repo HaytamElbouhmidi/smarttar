@@ -1,0 +1,51 @@
+# SmartTar v0.4.0 package and signed-upgrade validation
+name: SmartTar Arch package
+
+on:
+  push:
+    branches-ignore:
+      - packages
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: archlinux:base-devel
+    steps:
+      - name: Install build and test tools in the disposable Arch container
+        run: pacman -Syu --noconfirm --needed python kdialog xdg-utils desktop-file-utils git
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Create the unprivileged package builder
+        run: |
+          useradd --create-home smarttar-build
+          install -d -o smarttar-build -g smarttar-build /tmp/smarttar-build-output
+          install -d -o smarttar-build -g smarttar-build /tmp/smarttar-build-source
+          for source_file in smarttar.py LICENSE tools/build_package.sh packaging/arch/PKGBUILD.in packaging/arch/smarttar packaging/arch/smarttar-handler.desktop packaging/arch/README.install
+          do
+            install -Dm644 "$source_file" "/tmp/smarttar-build-source/$source_file"
+          done
+          chown -R smarttar-build:smarttar-build /tmp/smarttar-build-source
+      - name: Build the checked-out package
+        run: runuser -u smarttar-build -- bash /tmp/smarttar-build-source/tools/build_package.sh /tmp/smarttar-build-output
+      - name: Validate the package and a signed system upgrade
+        env:
+          SMARTTAR_DISPOSABLE_CONTAINER: '1'
+          SMARTTAR_BUILD_USER: smarttar-build
+        run: bash tools/test_arch_package.sh /tmp/smarttar-build-output/smarttar-0.4.0-1-any.pkg.tar.zst
+      - name: Save package test outputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: smarttar-arch-package-test
+          path: |
+            /tmp/smarttar-build-output/*.pkg.tar.zst
+            /tmp/smarttar-build-output/package-build.json
+            /tmp/smarttar-build-output/package-test.json
+          if-no-files-found: error
+          retention-days: 14

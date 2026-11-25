@@ -1,0 +1,21 @@
+SmartTar v0.4.0
+
+Use SmartTar to install supported Linux app downloads and add menu shortcuts.
+
+After installing the package, run smarttar --migrate as your normal desktop user
+to move an earlier user installation to this package. For a new installation,
+run smarttar --setup to select SmartTar as your download handler.
+
+Open .tar.gz, .tgz, or .AppImage downloads with SmartTar. For executable
+AppImages, right-click and choose Open With SmartTar if double-click runs the
+download directly.
+
+When the signed SmartTar repository is configured, normal system updates also
+update SmartTar. A package file installed on its own does not add that source.
+The programs installed through SmartTar have their own separate update needs.
+
+Before removing the SmartTar package, run smarttar --restore-association as
+your normal desktop user. Then remove the package with your software manager.
+Programs previously installed through SmartTar are kept.
+
+Report a problem: https://github.com/HaytamElbouhmidi/smarttar/issues

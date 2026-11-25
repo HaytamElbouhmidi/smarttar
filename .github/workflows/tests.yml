@@ -1,8 +1,10 @@
-# SmartTar v0.3.0 validation workflow
+# SmartTar v0.4.0 validation workflow
 name: SmartTar tests
 
 on:
   push:
+    branches-ignore:
+      - packages
   pull_request:
   workflow_dispatch:
 

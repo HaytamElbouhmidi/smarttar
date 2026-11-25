@@ -1,4 +1,4 @@
-"""SmartTar v0.2.0 user-level installation script integration checks."""
+"""SmartTar v0.4.0 manual installation script integration checks."""
 
 import os
 import shutil
@@ -50,7 +50,10 @@ class InstallScriptTests(unittest.TestCase):
         path.chmod(0o755)
 
     def run_script(self, name):
-        return subprocess.run(["bash", str(PROJECT / name)], env=self.env, capture_output=True, text=True, timeout=30)
+        arguments = ["bash", str(PROJECT / name)]
+        if name == "install.sh":
+            arguments.append("--manual")
+        return subprocess.run(arguments, env=self.env, capture_output=True, text=True, timeout=30)
 
     def test_install_doctor_and_uninstall_use_real_xdg_lookup(self):
         installed = self.run_script("install.sh")

@@ -2,7 +2,7 @@
 
 **Install downloaded Linux apps with a few clicks.**
 
-Version 0.3.0 · Testing · CachyOS and Arch Linux · KDE Plasma and DEsk
+Version 0.4.0 · Testing · CachyOS and Arch Linux · KDE Plasma and DEsk
 
 I built SmartTar for people who want to install a downloaded program without working out terminal commands. After the one-time setup, open a `.tar.gz`, `.tgz`, or `.AppImage` download with SmartTar, choose the install option, and confirm. The installed app appears in your application menu.
 
@@ -93,42 +93,67 @@ These are real SmartTar dialogs captured in an automated Ubuntu test session, no
 
 ## Installation
 
+**v0.4.0 rollout status:** The signed package-update route is staged. Repository publication and the first clean install, migration, and upgrade still need verification.
+
 ### One-time setup
 
-**The current setup still requires two terminal commands.** You only do this to install SmartTar or update it. Everyday use is graphical after setup.
+**Run the setup command once.** After that, SmartTar's own updates can arrive with your normal system updates. Everyday use stays graphical.
 
 1. Use **Download SmartTar** above and extract the ZIP. Extract means unpacking its contents into a normal folder. Do not try to run the installer from inside the ZIP viewer.
 2. Open the extracted folder containing `install.sh` in Dolphin.
-3. Right-click inside the folder and choose **Open Terminal Here**. A terminal is a window where you enter commands. You can copy the two commands below as written.
-4. Copy and paste this command to install any missing requirements. Enter your Linux password if asked:
-
-   ```bash
-   sudo pacman -S --needed python kdialog xdg-utils
-   ```
-
-5. Run the SmartTar installer:
+3. Right-click inside the folder and choose **Open Terminal Here**. A terminal is a window where you enter commands.
+4. Copy and paste:
 
    ```bash
    bash install.sh
    ```
 
-   Do not put `sudo` before this second command. SmartTar installs for your own user account.
+   Start it as your normal user, without putting `sudo` before the command. The installer requests administrator permission for the package setup, then configures your desktop as your normal user. It runs a full system update while installing SmartTar, so read the package list and prompts before continuing.
 
-6. Close the terminal and double-click `examples/smarttar-smoke-test.tar.gz` in the extracted project folder. SmartTar should open and offer to unpack its text file.
+5. Close the terminal and double-click `examples/smarttar-smoke-test.tar.gz` in the extracted project folder. SmartTar should open and offer to unpack its text file.
+
+This adds the **SmartTar project’s signed update source** to Pacman, the package manager used by CachyOS and Arch. It is maintained by this project, not an official Arch or CachyOS repository. Signing allows Pacman to reject packages or update lists that do not have the expected trusted signature.
+
+Only SmartTar's setup and package updates need administrator permission. Installing downloaded apps through SmartTar still saves them in your own user account.
 
 If setup reports a warning or opening an archive still starts Ark, see [troubleshooting](docs/TECHNICAL.md#diagnostics-and-command-line-extraction).
 
-### Updating an earlier installation
+### Already using SmartTar?
 
-Download and extract the latest SmartTar ZIP, open a terminal in that new folder, and run `bash install.sh` again without `sudo`. This updates SmartTar and adds its AppImage file associations. Your already installed apps are kept.
+Run the new `bash install.sh` once from the latest extracted folder. This moves SmartTar itself from the earlier manually copied installation to the package-managed installation. Your installed apps, original downloads, and application shortcuts are kept.
 
-Close and reopen Dolphin afterward. To check the installed version, run:
+Close and reopen Dolphin afterward. Future SmartTar releases can then be installed with normal system updates instead of downloading another ZIP each time. The earlier SmartTar program is kept as a backup, and any file-opening preferences you changed are preserved.
+
+To check which version is installed, run:
 
 ```bash
-python3 ~/.local/share/smarttar/smarttar.py --version
+smarttar --version
 ```
 
-It should report `0.3.0`.
+The package for this release reports `0.4.0`. If setup says the package installed but desktop migration did not finish, run `smarttar --migrate` as your normal user. If it reports a customized handler, stop and review it rather than deleting your settings.
+
+### How do updates work?
+
+Update CachyOS or Arch as you normally would. If you use the terminal, the usual full-system update is:
+
+```bash
+sudo pacman -Syu
+```
+
+When a new SmartTar package has been published, Pacman includes it in that update. The command can also update other installed system packages. SmartTar does not run a background updater or silently update itself between your system updates.
+
+**This updates SmartTar, not the apps you installed with SmartTar.** Those apps still need their own updater or a newer download from their publisher. A new commit on GitHub is not automatically a published package update.
+
+### Prefer a manual installation?
+
+If you do not want to add a package repository, install the requirements and use manual mode:
+
+```bash
+sudo pacman -S --needed python kdialog xdg-utils
+bash install.sh --manual
+```
+
+Manual mode installs SmartTar only for your user account and does not add the update source. It does not receive SmartTar updates through Pacman. To update it, download the latest ZIP and rerun `bash install.sh --manual`. Manual mode refuses to install over the package-managed version because that could hide its updates.
 
 ### Try it with an AppImage
 
@@ -150,7 +175,7 @@ SmartTar recognizes standard AppImages with a supported file header. A renamed f
 
 ## Is it lightweight?
 
-Yes. The installer copies one small Python program, using the Python and KDE components already on the system when available.
+Yes. SmartTar uses one small Python program and the system's Python and KDE components. The package-managed option uses Pacman for updates instead of adding another updater.
 
 - No background service, tray app, or startup process.
 - No bundled browser or Python runtime.
@@ -159,7 +184,7 @@ Yes. The installer copies one small Python program, using the Python and KDE com
 
 ## Why are there checks?
 
-The automated tests on GitHub run on GitHub's computers, not on yours. They are not run when you open a download. Tests, screenshots, and this documentation are not copied into the installed app.
+The automated tests on GitHub run on GitHub's computers, not on yours. They are not run when you open a download. The installed app does not include or run the development tests, benchmarks, or screenshot tools.
 
 SmartTar does check each archive before installation and while unpacking it. This helps catch damaged files, unsafe paths, and accidental overwrites. These checks add some processing time for large downloads, but there is no background scanning.
 
@@ -171,7 +196,9 @@ See the [measurements and technical details](docs/TECHNICAL.md#performance-measu
 
 This is a testing release, so you may still run into problems. Automated checks do not replace testing on real CachyOS, KDE Plasma, and DEsk setups. SmartTar can install programs it recognizes as ready to use, not every possible archive or AppImage. A successful installation does not guarantee that the app has all the system libraries it needs to run.
 
-The detailed compatibility list, size limits, diagnostics, benchmark results, and removal instructions are in [the technical guide](docs/TECHNICAL.md).
+The v0.4.0 package setup and migration are staged for verification. The screenshots show the actual v0.3.0 app-installation dialogs, which are separate from the new package setup.
+
+The detailed compatibility list, size limits, diagnostics, benchmark results, and removal instructions are in [the technical guide](docs/TECHNICAL.md). Package publishing and signing are covered in the [maintainer guide](docs/MAINTAINERS.md).
 
 ## License
 

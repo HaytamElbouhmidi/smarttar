@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SmartTar v0.3.0, a local archive and AppImage installer for KDE."""
+"""SmartTar v0.4.0, a local archive and AppImage installer for KDE."""
 
 # Copyright (c) 2026 Haytam Elbouhmidi
 # SPDX-License-Identifier: MIT
@@ -26,8 +26,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 DESKTOP_ID = "smarttar-handler.desktop"
+SYSTEM_SCRIPT = Path("/usr/lib/smarttar/smarttar.py")
+SYSTEM_COMMAND = Path("/usr/bin/smarttar")
+SYSTEM_DESKTOP = Path("/usr/share/applications/smarttar-handler.desktop")
 MIME_TYPE = "application/x-compressed-tar"
 APPIMAGE_MIME_TYPES = (
     "application/vnd.appimage",
@@ -115,6 +118,21 @@ def app_root() -> Path:
 
 def application_dir() -> Path:
     return data_home() / "applications"
+
+
+def require_desktop_user() -> None:
+    if os.geteuid() == 0 or os.environ.get("SUDO_USER") or os.environ.get("SUDO_UID"):
+        raise SmartTarError("Run SmartTar as your normal desktop user, without sudo.")
+
+
+def package_installed() -> bool:
+    return SYSTEM_SCRIPT.is_file() and SYSTEM_COMMAND.is_file() and os.access(SYSTEM_COMMAND, os.X_OK)
+
+
+def handler_exec(script_path: Path) -> str:
+    if package_installed():
+        return f"{SYSTEM_COMMAND} %f"
+    return f"python3 {desktop_quote(str(script_path))} %f"
 
 
 def normalize_member(name: str) -> str:
@@ -768,7 +786,7 @@ def desktop_quote(value: str) -> str:
     return '"' + desktop_string(value) + '"'
 
 
-def write_desktop_file(path: Path, name: str, exec_line: str, hidden: bool = False, working_directory: Path | None = None) -> None:
+def write_desktop_file(path: Path, name: str, exec_line: str, hidden: bool = False, working_directory: Path | None = None, *, replace: bool = False) -> None:
     desktop_string(exec_line)
     lines = [
         "[Desktop Entry]",
@@ -790,9 +808,15 @@ def write_desktop_file(path: Path, name: str, exec_line: str, hidden: bool = Fal
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             stream.write("\n".join(lines) + "\n")
         os.chmod(temporary, 0o644)
-        os.link(temporary, path, follow_symlinks=False)
+        if replace:
+            if path.is_symlink() or (path.exists() and not path.is_file()):
+                raise SmartTarError("The existing SmartTar handler is not a regular file.")
+            os.replace(temporary, path)
+        else:
+            os.link(temporary, path, follow_symlinks=False)
     finally:
-        os.unlink(temporary)
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def install_portable(info: Inspection, candidate: str, root: Path | None = None, desktop_dir: Path | None = None) -> Path:
@@ -930,13 +954,17 @@ def write_default_line(path: Path, replacement: str | None, mime_type: str = MIM
 def refresh_kde_cache() -> list[str]:
     warnings = []
     if shutil.which("kbuildsycoca6") is not None:
-        result = run_command("kbuildsycoca6", "--noincremental")
-        if result.returncode:
-            warnings.append("KDE cache refresh failed: " + (result.stderr.strip() or str(result.returncode)))
+        try:
+            result = run_command("kbuildsycoca6", "--noincremental")
+            if result.returncode:
+                warnings.append("KDE cache refresh failed: " + (result.stderr.strip() or str(result.returncode)))
+        except (OSError, SmartTarError) as exc:
+            warnings.append("KDE cache refresh failed: " + str(exc))
     return warnings
 
 
 def configure_association(script_path: Path) -> bool:
+    require_desktop_user()
     if shutil.which("xdg-mime") is None:
         raise SmartTarError("xdg-mime is required. Install xdg-utils first.")
     if shutil.which("kdialog") is None:
@@ -969,13 +997,12 @@ def configure_association(script_path: Path) -> bool:
                 }
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
-    if app_file.exists():
-        app_file.unlink()
     write_desktop_file(
         app_file,
         "SmartTar",
-        f"python3 {desktop_quote(str(script_path))} %f",
+        handler_exec(script_path),
         hidden=True,
+        replace=True,
     )
     for mime_type, record in records:
         for filename in record["overrides"]:
@@ -994,6 +1021,7 @@ def configure_association(script_path: Path) -> bool:
 
 
 def restore_association() -> None:
+    require_desktop_user()
     settings = config_home() / "smarttar" / "association.json"
     app_file = application_dir() / DESKTOP_ID
     if settings.exists():
@@ -1036,6 +1064,106 @@ def restore_association() -> None:
         settings.unlink()
     for warning in refresh_kde_cache():
         print(f"Warning: {warning}", file=sys.stderr)
+
+
+def desktop_fields(path: Path) -> tuple[dict[str, str], int]:
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 65536:
+        raise SmartTarError("The SmartTar handler is missing or is not a small regular file.")
+    fields = {}
+    exec_count = 0
+    section = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped == "[Desktop Entry]"
+        elif section and "=" in line and not stripped.startswith("#"):
+            key, value = line.split("=", 1)
+            fields[key.strip()] = value
+            exec_count += key.strip() == "Exec"
+    return fields, exec_count
+
+
+def migrate_to_package() -> bool:
+    require_desktop_user()
+    if not package_installed() or not SYSTEM_DESKTOP.is_file():
+        raise SmartTarError("Install the SmartTar system package before migrating this account.")
+    legacy = data_home() / "smarttar" / "smarttar.py"
+    app_file = application_dir() / DESKTOP_ID
+    settings = config_home() / "smarttar" / "association.json"
+    if not any(path.exists() or path.is_symlink() for path in (legacy, app_file, settings)):
+        return configure_association(SYSTEM_SCRIPT)
+
+    old_handler = None
+    old_handler_mode = 0o644
+    old_handler_fingerprint = None
+    if app_file.exists() or app_file.is_symlink():
+        fields, exec_count = desktop_fields(app_file)
+        previous_exec = f"python3 {desktop_quote(str(legacy))} %f"
+        if exec_count != 1 or fields.get("Type") != "Application" or fields.get("Exec") not in (previous_exec, f"{SYSTEM_COMMAND} %f"):
+            raise SmartTarError("The existing SmartTar handler was customized. Keep it backed up and review it before migrating.")
+        old_handler = app_file.read_bytes()
+        old_handler_mode = app_file.stat().st_mode & 0o777
+        old_handler_fingerprint = _file_fingerprint(app_file.stat())
+
+    backup_directory = None
+    backup_path = None
+    legacy_fingerprint = None
+    if legacy.exists() or legacy.is_symlink():
+        details = legacy.lstat()
+        if not stat.S_ISREG(details.st_mode) or details.st_uid != os.geteuid():
+            raise SmartTarError("The legacy SmartTar program is not a regular file owned by this account.")
+        legacy_fingerprint = _file_fingerprint(details)
+        backup_root = legacy.parent / "legacy-backups"
+        if backup_root.is_symlink() or (backup_root.exists() and not backup_root.is_dir()):
+            raise SmartTarError("The legacy backup location is not a regular directory.")
+        backup_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        backup_directory = Path(tempfile.mkdtemp(prefix=f"v{VERSION}-", dir=backup_root))
+        backup_path = backup_directory / "smarttar.py"
+
+    handler_replaced = False
+    replacement_fingerprint = None
+    try:
+        if old_handler_fingerprint is not None and _file_fingerprint(app_file.lstat()) != old_handler_fingerprint:
+            raise SmartTarError("The SmartTar handler changed during migration. Try again.")
+        if old_handler is None and (app_file.exists() or app_file.is_symlink()):
+            raise SmartTarError("A SmartTar handler appeared during migration. Try again.")
+        write_desktop_file(app_file, "SmartTar", f"{SYSTEM_COMMAND} %f", hidden=True, replace=True)
+        handler_replaced = True
+        replacement_fingerprint = _file_fingerprint(app_file.lstat())
+        if backup_path is not None:
+            if _file_fingerprint(legacy.lstat()) != legacy_fingerprint:
+                raise SmartTarError("The legacy SmartTar program changed during migration. Try again.")
+            legacy.rename(backup_path)
+    except Exception:
+        if handler_replaced:
+            try:
+                unchanged = replacement_fingerprint is not None and _file_fingerprint(app_file.lstat()) == replacement_fingerprint
+            except FileNotFoundError:
+                unchanged = False
+            if unchanged:
+                if old_handler is None:
+                    app_file.unlink()
+                else:
+                    descriptor, temporary = tempfile.mkstemp(prefix=".smarttar-restore-", dir=app_file.parent)
+                    try:
+                        with os.fdopen(descriptor, "wb") as stream:
+                            stream.write(old_handler)
+                        os.chmod(temporary, old_handler_mode)
+                        os.replace(temporary, app_file)
+                    finally:
+                        if os.path.exists(temporary):
+                            os.unlink(temporary)
+            else:
+                print("Warning: The handler changed again during migration. Its latest state was left untouched.", file=sys.stderr)
+        if backup_directory is not None and not any(backup_directory.iterdir()):
+            backup_directory.rmdir()
+        raise
+    if backup_path is not None:
+        print(f"Previous SmartTar program saved at: {backup_path}")
+    print("Existing file-opening preferences and installed applications were kept.")
+    for warning in refresh_kde_cache():
+        print(f"Warning: {warning}", file=sys.stderr)
+    return True
 
 
 def dialog(*args: str) -> subprocess.CompletedProcess[str]:
@@ -1193,28 +1321,26 @@ def doctor() -> int:
     print("Display session environment: " + ("present" if display else "MISSING"))
     healthy = healthy and display
 
-    handler = application_dir() / DESKTOP_ID
-    installed_script = data_home() / "smarttar" / "smarttar.py"
+    user_handler = application_dir() / DESKTOP_ID
+    packaged = any(path.exists() or path.is_symlink() for path in (SYSTEM_SCRIPT, SYSTEM_COMMAND))
+    installed_script = SYSTEM_SCRIPT if packaged else data_home() / "smarttar" / "smarttar.py"
+    handler = user_handler if user_handler.exists() or user_handler.is_symlink() else SYSTEM_DESKTOP if packaged else user_handler
+    print("Installation mode: " + ("system package" if packaged else "manual user installation"))
     print("Installed script: " + ("present" if installed_script.is_file() else "MISSING"))
     healthy = healthy and installed_script.is_file()
+    if packaged:
+        print("Package command: " + ("available" if package_installed() else "MISSING OR NOT EXECUTABLE"))
+        healthy = healthy and package_installed()
     handler_ok = handler.is_file()
     exec_ok = False
     try:
-        if handler_ok and handler.stat().st_size <= 65536:
-            fields = {}
-            exec_count = 0
-            section = False
-            for line in handler.read_text(encoding="utf-8").splitlines():
-                stripped = line.strip()
-                if stripped.startswith("[") and stripped.endswith("]"):
-                    section = stripped == "[Desktop Entry]"
-                elif section and "=" in line and not stripped.startswith("#"):
-                    key, value = line.split("=", 1)
-                    fields[key.strip()] = value
-                    exec_count += key.strip() == "Exec"
-            expected = f"python3 {desktop_quote(str(installed_script))} %f"
+        if handler_ok:
+            fields, exec_count = desktop_fields(handler)
+            expected = f"{SYSTEM_COMMAND} %f" if packaged else f"python3 {desktop_quote(str(installed_script))} %f"
             exec_ok = exec_count == 1 and fields.get("Exec") == expected
             handler_ok = fields.get("Type") == "Application" and all(mime_type in fields.get("MimeType", "").split(";") for mime_type in MIME_TYPES)
+            if packaged and handler == user_handler and not exec_ok:
+                print("User handler shadows the system package. Run smarttar --migrate to review migration.")
         else:
             handler_ok = False
     except (OSError, ValueError, SmartTarError) as exc:
@@ -1252,6 +1378,7 @@ def main() -> int:
     parser.add_argument("--inspect", action="store_true", help="Print the download classification as JSON without running it")
     parser.add_argument("--extract", type=Path, metavar="PARENT", help="Extract safely into a new folder under PARENT")
     parser.add_argument("--setup", action="store_true", help="Register SmartTar for .tar.gz and .AppImage downloads")
+    parser.add_argument("--migrate", action="store_true", help="Switch this account to the installed system package without changing existing defaults")
     parser.add_argument("--doctor", action="store_true", help="Check dependencies and desktop configuration without making changes")
     parser.add_argument("--restore-association", action="store_true", help="Restore previous archive and AppImage handlers")
     parser.add_argument("--version", action="version", version=VERSION)
@@ -1259,6 +1386,12 @@ def main() -> int:
     try:
         if args.doctor:
             return doctor()
+        elif args.migrate:
+            if not migrate_to_package():
+                print("SmartTar package setup was saved, but activation is not confirmed. Run smarttar --doctor.")
+                return 2
+            print("SmartTar now uses the system package. Keep its signed repository enabled to receive normal system updates.")
+            return 0
         elif args.setup:
             recognized = configure_association(Path(__file__).resolve())
             if recognized:
@@ -1274,6 +1407,8 @@ def main() -> int:
         else:
             if args.archive is None:
                 parser.error("an archive or AppImage path is required")
+            if not args.inspect:
+                require_desktop_user()
             if args.inspect:
                 info = inspect_appimage(args.archive) if args.archive.suffix.lower() == ".appimage" else inspect_archive(args.archive)
                 print(json.dumps(info.as_dict(), indent=2))
@@ -1289,7 +1424,8 @@ def main() -> int:
         return 0
     except (SmartTarError, OSError, ValueError) as exc:
         print(f"SmartTar: {exc}", file=sys.stderr)
-        if not (args.inspect or args.extract is not None or args.setup or args.restore_association or args.doctor):
+        interactive_user = os.geteuid() != 0 and not os.environ.get("SUDO_USER") and not os.environ.get("SUDO_UID")
+        if interactive_user and not (args.inspect or args.extract is not None or args.setup or args.migrate or args.restore_association or args.doctor):
             try:
                 notify(str(exc), error=True)
             except SmartTarError:

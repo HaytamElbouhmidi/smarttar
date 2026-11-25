@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+Status: Staged for verification. Signed repository publication, clean installation, migration, and an upgrade still need to be checked before this update route is described as ready.
+
+- Added a package-managed setup route so deliberately published SmartTar releases can be included in normal CachyOS and Arch system updates.
+- Added a project-maintained repository with trusted signatures required for both packages and the repository database.
+- Added `smarttar --migrate` to move the earlier per-user setup to the packaged command, preserve installed apps and current preferences, and keep the earlier script in a legacy backup.
+- Retained `--manual` setup for users who do not want to add the repository. Manual installations do not receive Pacman updates.
+- Kept everyday app installation user-level, with no background updater or new startup service. SmartTar's package updates do not update apps installed through SmartTar.
+
 ## 0.3.0
 
 Status: Testing. AppImage installation and menu launching still need verification on the laptop.

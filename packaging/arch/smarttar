@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# SmartTar v0.4.0 package launcher
+exec /usr/bin/python3 /usr/lib/smarttar/smarttar.py "$@"

@@ -1,0 +1,30 @@
+# SmartTar v0.4.0 package recipe
+# tools/build_package.sh supplies the checksum for the checked-out source bundle.
+pkgname=smarttar
+pkgver=0.4.0
+pkgrel=1
+pkgdesc='Install downloaded Linux apps and add them to the application menu'
+arch=('any')
+url='https://github.com/HaytamElbouhmidi/smarttar'
+license=('MIT')
+depends=('python>=3.10' 'kdialog' 'xdg-utils')
+options=('!strip' '!debug')
+source=("smarttar-${pkgver}.tar")
+sha256sums=('@SOURCE_SHA256@')
+
+check() {
+    test "$(python3 "${srcdir}/smarttar.py" --version)" = "${pkgver}"
+    python3 -m py_compile "${srcdir}/smarttar.py"
+    if command -v desktop-file-validate >/dev/null 2>&1
+    then
+        desktop-file-validate "${srcdir}/smarttar-handler.desktop"
+    fi
+}
+
+package() {
+    install -Dm755 "${srcdir}/smarttar.py" "${pkgdir}/usr/lib/smarttar/smarttar.py"
+    install -Dm755 "${srcdir}/smarttar" "${pkgdir}/usr/bin/smarttar"
+    install -Dm644 "${srcdir}/smarttar-handler.desktop" "${pkgdir}/usr/share/applications/smarttar-handler.desktop"
+    install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/smarttar/LICENSE"
+    install -Dm644 "${srcdir}/README.install" "${pkgdir}/usr/share/doc/smarttar/README.install"
+}
